@@ -157,6 +157,38 @@ def task_redact_url(url):
         return str(url)
 
 
+# 命令日志中需要脱敏值的参数（后一个元素是敏感值）
+TASK_CMD_SENSITIVE_OPTS = ("--cookies", "--username", "--password", "--client-certificate")
+TASK_CMD_SENSITIVE_HEADER_PREFIXES = ("cookie:", "authorization:", "x-ms-token", "session")
+
+
+def task_redact_command(cmd):
+    """脱敏 yt-dlp 命令行（供 [COMMAND] 日志）：敏感选项值与敏感 Header 值替换为 REDACTED"""
+    try:
+        out = []
+        redact_next = False
+        for part in cmd:
+            s = str(part)
+            if redact_next:
+                out.append("REDACTED")
+                redact_next = False
+                continue
+            if s in TASK_CMD_SENSITIVE_OPTS:
+                out.append(s)
+                redact_next = True
+                continue
+            low = s.lower()
+            if low.startswith(("cookie:", "authorization:")) or (
+                low.startswith(("x-ms-token", "session")) and ":" in s
+            ):
+                out.append(s.split(":", 1)[0] + ":REDACTED")
+                continue
+            out.append(s)
+        return " ".join(out)
+    except Exception:
+        return "NA"
+
+
 def task_debug(*lines):
     """追加写入 logs/tiktok_debug.log（线程安全，超过 10MB 自动滚动）"""
     if not TASK_DEBUG_LOG_ENABLED:
@@ -241,6 +273,146 @@ def get_ytdlp_version():
     except Exception:
         pass
     return "unknown"
+
+
+# ============================================================
+# yt-dlp 轻量版本检查（后台线程，不阻塞 GUI，失败不影响启动）
+#
+# 策略：启动后异步检查一次；距上次检查不足 24 小时则跳过；
+#       发现新版本时优先用 yt-dlp 自带 -U 自更新，失败则从 GitHub 下载；
+#       任何失败都保留现有版本继续使用。
+# ============================================================
+
+YTDLP_UPDATE_INTERVAL = 24 * 3600
+YTDLP_LAST_CHECK_FILE = RUN_DIR / "_download_temp" / ".ytdlp_last_update_check"
+
+
+def _ytdlp_latest_release_version():
+    """查询 GitHub 最新 release 版本号，失败返回 None"""
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest",
+            headers={"User-Agent": "man.py-update-check"}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8", "ignore"))
+        tag = str(data.get("tag_name") or "").strip()
+        return tag or None
+    except Exception:
+        return None
+
+
+def _ytdlp_try_self_update():
+    """优先用 yt-dlp 自带 -U 自更新，失败回退到 GitHub 下载替换"""
+    try:
+        r = subprocess.run(
+            [str(YTDLP_EXE), "-U"],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="ignore", timeout=120
+        )
+        out = ((r.stdout or "") + (r.stderr or "")).lower()
+        if r.returncode == 0 and ("updated yt-dlp" in out or "latest version" in out):
+            return True
+    except Exception:
+        pass
+    # 回退：下载最新 exe 到临时文件，替换成功后才生效（失败保留旧版）
+    try:
+        import urllib.request
+        tmp = Path(str(YTDLP_EXE) + ".new")
+        req = urllib.request.Request(
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
+            headers={"User-Agent": "man.py-update-check"}
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp, open(tmp, "wb") as f:
+            f.write(resp.read())
+        if tmp.stat().st_size > 1024 * 1024:
+            backup = Path(str(YTDLP_EXE) + ".bak")
+            try:
+                os.replace(str(YTDLP_EXE), str(backup))
+            except Exception:
+                backup = None
+            try:
+                os.replace(str(tmp), str(YTDLP_EXE))
+                return True
+            except Exception:
+                if backup and backup.exists():
+                    try:
+                        os.replace(str(backup), str(YTDLP_EXE))
+                    except Exception:
+                        pass
+        try:
+            tmp.unlink()
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return False
+
+
+def check_ytdlp_update_async():
+    """后台检查/更新 yt-dlp（非阻塞）；结果写入日志，任何异常不影响程序运行"""
+    def _worker():
+        try:
+            local = get_ytdlp_version()
+            # 24 小时内已检查过 → 跳过（不每次下载都检查）
+            try:
+                if YTDLP_LAST_CHECK_FILE.exists():
+                    age = time.time() - YTDLP_LAST_CHECK_FILE.stat().st_mtime
+                    if age < YTDLP_UPDATE_INTERVAL:
+                        task_debug(f"[yt-dlp] version={local} source=local "
+                                   f"update_check=skipped({int(age / 3600)}h ago)")
+                        return
+            except Exception:
+                pass
+            latest = _ytdlp_latest_release_version()
+            if not latest:
+                task_debug(f"[yt-dlp] version={local} source=local update_check=failed(网络不可用)")
+            elif latest == local:
+                task_debug(f"[yt-dlp] version={local} source=local update_check=latest")
+            else:
+                ok = _ytdlp_try_self_update()
+                new_ver = get_ytdlp_version()
+                if ok and new_ver not in ("unknown", local):
+                    task_debug(f"[yt-dlp] updated=true version={new_ver} (原 {local})")
+                else:
+                    task_debug(f"[yt-dlp] version={local} source=local "
+                               f"update_check=update_failed(latest={latest}，继续使用当前版本)")
+            try:
+                YTDLP_LAST_CHECK_FILE.parent.mkdir(parents=True, exist_ok=True)
+                YTDLP_LAST_CHECK_FILE.write_text(str(time.time()), encoding="utf-8")
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    try:
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        return t
+    except Exception:
+        return None
+
+
+def get_system_proxy_state():
+    """检测系统代理状态（只记录，不绑定、不传给 yt-dlp）
+
+    代理由系统 / v2rayN / TUN 负责；程序只在日志中记录 system/default。
+    """
+    try:
+        if sys.platform == "win32":
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                r"Software\Microsoft\Windows\CurrentVersion\Internet Settings") as k:
+                enable, _ = winreg.QueryValueEx(k, "ProxyEnable")
+                if enable:
+                    server, _ = winreg.QueryValueEx(k, "ProxyServer")
+                    return f"system({server})"
+    except Exception:
+        pass
+    if os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY"):
+        return "env"
+    return "default"
 
 
 def check_environment():
@@ -434,6 +606,14 @@ class OmniGetBridgeHandler(BaseHTTPRequestHandler):
                 except Exception as e:
                     self.server.bridge.log(f"Referer 保存失败：{e}")
 
+            # 扩展可选发送附加 HTTP Headers（自动排除 Cookie/UA/Referer，由程序单独管理）
+            extra_headers = data.get("headers", None)
+            if extra_headers:
+                try:
+                    self.server.bridge.save_extra_headers(extra_headers, url or referer)
+                except Exception as e:
+                    self.server.bridge.log(f"附加 Headers 保存失败：{e}")
+
             # 如果有 Cookie，自动更新
             if cookies and self.server.bridge.cookies_callback:
                 try:
@@ -569,6 +749,44 @@ class OmniGetBridge:
             self.log(f"Referer 已更新：{seg}")
         except Exception as e:
             self.log(f"Referer 保存失败：{e}")
+
+    # 扩展附加 Headers 中明确排除的项（由程序单独管理，避免重复/互相覆盖）
+    EXTRA_HEADERS_EXCLUDED = ("cookie", "user-agent", "referer")
+
+    def save_extra_headers(self, headers, source_url):
+        """按根域名保存扩展附加 HTTP Headers → cookies/<域名>/_headers.txt
+
+        每行格式：Name: value；自动排除 Cookie / User-Agent / Referer。
+        """
+        try:
+            if isinstance(headers, dict):
+                items = headers.items()
+            elif isinstance(headers, list):
+                items = [(h.get("name", ""), h.get("value", "")) for h in headers if isinstance(h, dict)]
+            else:
+                return
+            lines = []
+            for name, value in items:
+                name = str(name or "").strip()
+                value = str(value or "").strip()
+                if not name or not value:
+                    continue
+                if name.lower() in OmniGetBridge.EXTRA_HEADERS_EXCLUDED:
+                    continue
+                lines.append(f"{name}: {value}")
+            if not lines:
+                return
+            host = CookieManager._extract_host(source_url or "")
+            root = CookieManager.root_domain_of(host)
+            if not root:
+                return
+            seg = CookieManager._safe_domain_segment(root)
+            target_dir = COOKIES_DIR / seg
+            target_dir.mkdir(parents=True, exist_ok=True)
+            write_text_file(target_dir / "_headers.txt", "\n".join(lines))
+            self.log(f"附加 Headers 已更新：{seg}（{len(lines)} 项）")
+        except Exception as e:
+            self.log(f"附加 Headers 保存失败：{e}")
 
     def start_pairing(self):
         """开启配对窗口（约 120 秒）"""
@@ -1611,6 +1829,123 @@ class DownloadThread(QThread):
             pass
         return None
 
+    def get_extra_headers(self, url):
+        """读取扩展同步的附加 HTTP Headers（全平台通用）
+
+        来源：cookies/<根域名>/_headers.txt（每行 Name: value）；
+        保存时已排除 Cookie / User-Agent / Referer，这里再双保险过滤一次。
+        返回 ["Name: value", ...]，无则返回空列表。
+        """
+        headers = []
+        try:
+            root = CookieManager.root_domain_of(
+                CookieManager._extract_host(url)
+            )
+            if not root:
+                return headers
+            text = read_text_file(self.cookies_dir / root / "_headers.txt")
+            if not text:
+                return headers
+            for line in text.splitlines():
+                line = line.strip()
+                if not line or ":" not in line:
+                    continue
+                name = line.split(":", 1)[0].strip()
+                if name.lower() in ("cookie", "user-agent", "referer"):
+                    continue
+                headers.append(line)
+        except Exception:
+            pass
+        return headers
+
+    def resolve_cookie_file(self, url):
+        """解析扩展同步的原始 Cookie 文件路径（只查找，不产生日志）
+
+        优先级与 get_cookie_args 一致：统一 _all_cookies.txt → 按域名 →
+        平台关联域名 → CDN 映射 → 旧版 cookies.txt；都不存在返回 None。
+        """
+        try:
+            all_file = self.cookies_dir / "_all_cookies.txt"
+            if all_file.exists():
+                return all_file
+            mgr = CookieManager(self.cookies_dir)
+            if url:
+                root = mgr.root_domain_of(mgr._extract_host(url))
+                cookie_file = self.cookies_dir / root / "_default.txt"
+                if cookie_file.exists():
+                    return cookie_file
+                platform = mgr._detect_platform(root)
+                for domain in PLATFORM_COOKIE_DOMAINS.get(platform, []):
+                    alt_file = self.cookies_dir / domain.lstrip(".") / "_default.txt"
+                    if alt_file.exists():
+                        return alt_file
+                primary = CDN_TO_PRIMARY_DOMAIN.get(root)
+                if primary:
+                    primary_file = self.cookies_dir / primary / "_default.txt"
+                    if primary_file.exists():
+                        return primary_file
+            if COOKIE_FILE.exists():
+                return COOKIE_FILE
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def make_session_cookie_copy(src_path, task_id):
+        """复制扩展 Cookie 为临时会话副本，供 yt-dlp 使用
+
+        yt-dlp 可能回写/修改 --cookies 文件，用副本避免破坏扩展原始文件；
+        原始文件只读不写。复制失败时退回原始文件（不影响下载）。
+        """
+        try:
+            src = Path(src_path)
+            if not src.exists():
+                return None
+            TEMP_DIR.mkdir(parents=True, exist_ok=True)
+            dst = TEMP_DIR / f"_session_cookie_{task_id}.txt"
+            dst.write_bytes(src.read_bytes())
+            return dst
+        except Exception:
+            try:
+                return Path(src_path)
+            except Exception:
+                return None
+
+    @staticmethod
+    def remove_session_cookie_copy(path, original=None):
+        """任务结束后删除临时 Cookie 副本（绝不删除扩展原始文件）"""
+        try:
+            if not path:
+                return
+            p = Path(path)
+            if original and p == Path(original):
+                return
+            if p.name.startswith("_session_cookie_") and p.parent == TEMP_DIR:
+                p.unlink()
+        except Exception:
+            pass
+
+    def js_runtime_info(self):
+        """检测 JS 运行时，返回 (runtime, 绝对路径)；不存在返回 (None, "")
+
+        参考 OmniGet：独立打包的 yt-dlp 无法自己从 PATH 发现运行时，
+        必须检测绝对路径并显式传 --js-runtimes runtime:path。
+        """
+        import shutil
+        if sys.platform == "win32":
+            portable_node = RUN_DIR / "nodejs" / "node.exe"
+            if portable_node.exists():
+                return "node", str(portable_node)
+        for runtime, binary in (("node", "node"), ("deno", "deno"), ("bun", "bun")):
+            path = shutil.which(binary)
+            if path and os.path.exists(path):
+                return runtime, str(Path(path).resolve())
+        if sys.platform == "win32":
+            for path in (r"C:\Program Files\nodejs\node.exe", r"C:\Program Files (x86)\nodejs\node.exe"):
+                if os.path.exists(path):
+                    return "node", path
+        return None, ""
+
     # Cookie 新鲜度阈值（秒）：超过此时间认为可能过期
     COOKIE_STALE_THRESHOLD = 2 * 3600  # 2 小时
     COOKIE_EXPIRED_THRESHOLD = 6 * 3600  # 6 小时
@@ -1742,45 +2077,25 @@ class DownloadThread(QThread):
         )
 
     def detect_js_runtime(self):
-        """检测可用的 JS 运行时（用于 yt-dlp nsig 解密）"""
-        import shutil
+        """检测可用的 JS 运行时（用于 yt-dlp nsig 解密）
 
-        # 优先检测项目目录下的便携版 Node.js（打包后自带）
-        if sys.platform == "win32":
-            portable_node = RUN_DIR / "nodejs" / "node.exe"
-            if portable_node.exists():
-                self.log(f"[JS Runtime] 检测到便携版 Node.js: {portable_node}")
-                return f"node:{portable_node}"
-
-        runtimes = [
-            ("node", "node"),
-            ("deno", "deno"),
-            ("bun", "bun"),
-        ]
-
-        for runtime, binary in runtimes:
-            path = shutil.which(binary)
-            if path:
-                self.log(f"[JS Runtime] 检测到系统 PATH 中的 {runtime}: {path}")
-                return f"{runtime}:{path}"
-
-        # Windows 系统安装路径
-        if sys.platform == "win32":
-            candidates = [
-                ("node", r"C:\Program Files\nodejs\node.exe"),
-                ("node", r"C:\Program Files (x86)\nodejs\node.exe"),
-            ]
-            for runtime, path in candidates:
-                if os.path.exists(path):
-                    self.log(f"[JS Runtime] 检测到固定路径的 {runtime}: {path}")
-                    return f"{runtime}:{path}"
-
-        self.log("[JS Runtime] ⚠ 未检测到任何 JS 运行时")
+        统一走 js_runtime_info()：检测绝对路径并验证文件存在，
+        确保真正以 --js-runtimes runtime:path 传给 yt-dlp。
+        """
+        runtime, path = self.js_runtime_info()
+        if runtime:
+            self.log(f"[JS Runtime] runtime={runtime} path={path} enabled=true")
+            return f"{runtime}:{path}"
+        self.log("[JS Runtime] enabled=false（未检测到 JS 运行时）")
         return None
 
     def build_ytdlp_args(self, url, job_dir, ua, cookie_args, player_client=None,
                          referer=None, concurrency=None):
-        """构建 yt-dlp 命令参数，支持 YouTube player_client / 通用 Referer / TikTok 并发配置"""
+        """构建 yt-dlp 命令参数（统一 Runner）
+
+        支持 YouTube player_client / 通用 Referer 双通道 / 扩展附加 Headers /
+        JS Runtime / TikTok 并发配置；代理不主动设置，遵循系统环境代理。
+        """
         self.log(f"[DEBUG] build_ytdlp_args 被调用: {url[:60]}...")
         output_template = job_dir / "source.%(ext)s"
 
@@ -1788,6 +2103,9 @@ class DownloadThread(QThread):
             str(YTDLP_EXE),
             "--newline",
             "--no-warnings",
+            "--no-playlist",
+            "--no-check-certificates",
+            "--no-mtime",
             "--encoding", "utf-8",
             "--user-agent", ua,
             "--ffmpeg-location", str(FFMPEG_EXE),
@@ -1806,7 +2124,7 @@ class DownloadThread(QThread):
             "-o", str(output_template)
         ]
 
-        # JS 运行时（用于 nsig 解密）
+        # JS 运行时（用于 nsig 解密）：必须传绝对路径，独立打包的 yt-dlp 无法自己发现 PATH
         js_runtime = self.detect_js_runtime()
         if js_runtime:
             # 先清除默认的 JS 运行时，再添加我们检测到的（避免 yt-dlp 使用低优先级的 deno）
@@ -1818,13 +2136,24 @@ class DownloadThread(QThread):
         cmd.extend(cookie_args)
 
         # Referer：全平台通用请求参数。有扩展同步的有效值时传递，缺失不伪造。
+        # 双通道：--referer（提取器请求）+ --add-header（媒体/分片请求），值相同不冲突。
         if referer:
             cmd.extend(["--referer", referer])
+            cmd.extend(["--add-header", f"Referer: {referer}"])
+
+        # 扩展附加 Headers（已排除 Cookie/UA/Referer，由程序单独管理，避免重复覆盖）
+        for header in self.get_extra_headers(url):
+            cmd.extend(["--add-header", header])
+
+        # 非 YouTube 平台：分块下载（参考 OmniGet；YouTube 不加以避免触发风控）
+        is_youtube = detect_platform(url) == "youtube"
+        if not is_youtube:
+            cmd.extend(["--http-chunk-size", "10M"])
 
         # TikTok 特定参数：添加完整的浏览器请求头
         is_tiktok_cmd = detect_platform(url) == "tiktok"
         if is_tiktok_cmd:
-            # 模拟 Chrome 浏览器的完整请求头
+            # 模拟 Chrome 浏览器的完整请求头（Referer 已在上方通用处理，不重复）
             cmd.extend([
                 "--add-header", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "--add-header", "Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
@@ -1838,13 +2167,12 @@ class DownloadThread(QThread):
             ])
             self.log("[yt-dlp] TikTok 模式：启用完整浏览器请求头")
             
-            # TikTok 并发片段数：默认 8，失败后降级为 4（唯一保留的 TikTok 专用增强）
+            # TikTok 并发片段数：默认 8，下载阶段失败后降为 4（仅作下载阶段并发降级）
             workers = concurrency or 8
             cmd.extend(["-N", str(workers)])
             self.log(f"[yt-dlp] TikTok 模式：启用 {workers} 个并发片段")
 
         # YouTube 特定参数
-        is_youtube = detect_platform(url) == "youtube"
         if is_youtube:
             # 使用指定的 player_client，默认用 default
             client = player_client or "default"
@@ -1924,9 +2252,17 @@ class DownloadThread(QThread):
         self._task_log_start(task_id, url, platform)
 
         ua = self.get_ua()
-        cookie_args = self.get_cookie_args(url)
         referer = self.get_referer(url)
         is_youtube = platform == "youtube"
+
+        # Cookie 临时副本：避免 yt-dlp 回写破坏扩展原始 Cookie 文件（原始只读）
+        source_cookie_file = self.resolve_cookie_file(url)
+        session_cookie_file = None
+        if source_cookie_file:
+            session_cookie_file = self.make_session_cookie_copy(source_cookie_file, task_id)
+            cookie_args = ["--cookies", str(session_cookie_file or source_cookie_file)]
+        else:
+            cookie_args = []
 
         # 需要预请求的平台列表（模拟用户点击，避免被识别为机器人）
         # 注意：TikTok 不做任何预请求/后台访问，浏览器活跃由用户 + 扩展负责
@@ -1988,8 +2324,7 @@ class DownloadThread(QThread):
                     self.log(f"[网络重试 {net_attempt}/{self.NETWORK_MAX_RETRIES}] 等待 {delay} 秒后重试...")
                     time.sleep(delay)
                     self._cleanup_job_dir(job_dir)
-                    # 重新获取 cookie（可能已刷新）
-                    cookie_args = self.get_cookie_args(url)
+                    # 网络重试不刷新 Cookie（保留当前会话副本，避免无脑刷新）
 
                 attempts = net_attempt + 1
                 self._task_log_request(task_id, cookie_args, ua, referer, attempts, None)
@@ -2052,6 +2387,7 @@ class DownloadThread(QThread):
 
             return False
         finally:
+            self.remove_session_cookie_copy(session_cookie_file, source_cookie_file)
             self._task_log_end(task_id, result, attempts, task_start, final_class)
 
     def _run_ytdlp(self, cmd):
@@ -2093,57 +2429,155 @@ class DownloadThread(QThread):
         process.wait()
         return process.returncode == 0, "\n".join(stderr_output)
 
-    # ---- TikTok 并发降级：唯一保留的 TikTok 专用增强 ----
-    # -N 8 → 失败 → 等待 → -N 4 → 失败 → 结束。
-    # 不刷新 Cookie、不切换 UA/Referer、不管理代理、不连接浏览器。
-    TIKTOK_DOWNGRADE_DELAY = 5  # 并发降级重试前等待秒数
+    # ---- TikTok 两阶段重试（参考 OmniGet，唯一的 TikTok 专用增强）----
+    # 阶段 1 RESOLVE：网页解析/提取。失败 → 指数退避（2/6/12 秒），
+    #   仅在错误类别需要时重新读取扩展 Cookie/UA/Referer，-N 保持 8。
+    # 阶段 2 DOWNLOAD：媒体分片下载。失败 → 并发降级 -N 8 → -N 4，不刷新 Cookie。
+    # 总尝试上限 4 次；不管理代理、不连接浏览器、禁止无限重试。
+    TIKTOK_MAX_ATTEMPTS = 4
+    TIKTOK_RESOLVE_BACKOFF = (2, 6, 12)  # RESOLVE 重试前的指数退避（秒）
+    TIKTOK_DOWNLOAD_RETRY_DELAY = 5  # DOWNLOAD 并发降级前等待（秒）
+    TIKTOK_RESOLVE_WORKERS = 8  # RESOLVE 阶段并发（解析失败与并发无关，保持 8）
+    TIKTOK_DOWNLOAD_FALLBACK_WORKERS = 4  # DOWNLOAD 失败后的降级并发
+
+    @staticmethod
+    def _node_path():
+        """查找 node.exe（便携版优先，其次系统 PATH）"""
+        import shutil
+        portable = RUN_DIR / "nodejs" / "node.exe"
+        if portable.exists():
+            return str(portable)
+        return shutil.which("node") or ""
+
+    def _js_runtime_spec(self):
+        """实际传给 yt-dlp 的 js-runtimes 参数（静默检测，逻辑与 js_runtime_info 一致）"""
+        runtime, path = self.js_runtime_info()
+        if runtime:
+            return f"--no-js-runtimes --js-runtimes {runtime}:{path}"
+        return "NA"
+
+    @staticmethod
+    def _detect_challenge_solver(output_text):
+        """从 yt-dlp 实际输出判断 challenge solver（记录真实运行状态，不猜测）"""
+        if "native Python implementation" in output_text:
+            return "native_python"
+        m = re.search(r"\[jsc:(\w+)\]", output_text)
+        if m:
+            return m.group(1)
+        if "Solving JS challenge" in output_text:
+            return "unknown"
+        return "NA"
 
     def _download_tiktok(self, url, job_dir):
-        """TikTok 下载：-N 8 → -N 4 单次并发降级，最多 2 次尝试"""
+        """TikTok 两阶段下载：RESOLVE 失败→指数退避重读状态；DOWNLOAD 失败→-N 8→4 降级"""
         task_id = secrets.token_hex(3).upper()
         task_start = time.time()
         self._task_log_start(task_id, url, "tiktok")
-
-        # Cookie + UA + Referer 一次性读取，全程保持同一请求环境，重试不更换
-        ua = self.get_ua()
-        cookie_args = self.get_cookie_args(url)
-        referer = self.get_referer(url)
+        task_debug_section("TIKTOK TASK START", [
+            ("task_id", task_id),
+            ("url", task_redact_url(url)),
+            ("time", time.strftime("%Y-%m-%d %H:%M:%S")),
+        ], bordered=True)
 
         result = "FAILED"
         final_class = None
         attempts = 0
+        last_error = None
+        last_stage = "RESOLVE"
+        workers = self.TIKTOK_RESOLVE_WORKERS
+        refreshed_cookie = False
+        source_cookie_file = None
+        session_cookie_file = None
+        ua = cookie_args = referer = None
+
+        def _read_state():
+            """重新读取扩展同步的 UA / Referer，并按需重建 Cookie 临时副本"""
+            nonlocal ua, referer, cookie_args, source_cookie_file, session_cookie_file, refreshed_cookie
+            ua = self.get_ua()
+            referer = self.get_referer(url)
+            source_cookie_file = self.resolve_cookie_file(url)
+            if source_cookie_file:
+                self.remove_session_cookie_copy(session_cookie_file, source_cookie_file)
+                session_cookie_file = self.make_session_cookie_copy(source_cookie_file, task_id)
+                cookie_args = (["--cookies", str(session_cookie_file or source_cookie_file)])
+            else:
+                cookie_args = []
+            refreshed_cookie = True
 
         try:
-            for attempt, workers in ((1, 8), (2, 4)):
+            attempt = 0
+            while attempt < self.TIKTOK_MAX_ATTEMPTS:
                 if self.stop_flag or self.skip_flag:
                     result = "ABORTED"
                     return False
 
+                attempt += 1
                 attempts = attempt
 
-                if attempt == 2:
-                    self.log("")
-                    self.log(f"[TikTok] 并发降级（-N 8 → -N 4），等待 {self.TIKTOK_DOWNGRADE_DELAY} 秒后重试...")
-                    time.sleep(self.TIKTOK_DOWNGRADE_DELAY)
+                if attempt == 1:
+                    action = "INITIAL_READ"
+                    _read_state()
+                else:
+                    action = "REFRESH_BROWSER_STATE"
                     self._cleanup_job_dir(job_dir)
+                    # Cookie 只在需要时重新读取（解析/会话/403 类错误），
+                    # 普通下载失败不刷新；UA/Referer 每次重读开销极低，始终重读。
+                    if last_stage == "RESOLVE" and last_error and \
+                            self._classify_error(last_error) in self.COOKIE_REFRESH_CLASSES:
+                        _read_state()
+                    else:
+                        ua = self.get_ua()
+                        referer = self.get_referer(url)
+                        refreshed_cookie = False
 
-                self._task_log_request(task_id, cookie_args, ua, referer, attempt, workers)
+                retry_reason = last_error if attempt > 1 else None
+                self._task_log_request(
+                    task_id, cookie_args, ua, referer, attempt, workers,
+                    action=action, retry_reason=retry_reason,
+                    js_runtime_args=self._js_runtime_spec(),
+                )
+                self._task_log_cookie_ua_referer(task_id, cookie_args, ua, referer,
+                                                 source_cookie_file, refreshed_cookie)
 
                 cmd = self.build_ytdlp_args(
                     url, job_dir, ua, cookie_args,
                     referer=referer, concurrency=workers
                 )
 
+                # 下载前记录实际请求环境（方便判断 Node 是否真的参与）
+                self._task_log_js_runtime(task_id, attempt)
+                task_debug_section("YTDLP", [
+                    ("task_id", task_id),
+                    ("attempt", attempt),
+                    ("stage", "RESOLVE+DOWNLOAD"),
+                    ("concurrency", workers),
+                    ("retries", 5),
+                    ("extractor_retries", 3),
+                    ("fragment_retries", 5),
+                ])
+                task_debug(f"[COMMAND] task_id={task_id} {task_redact_command(cmd)}")
+
                 self.log("")
                 if attempt == 1:
                     self.log("开始下载：")
+                elif last_stage == "RESOLVE":
+                    self.log(f"TikTok 解析重试（第 {attempt} 次，已重新构建请求环境）：")
                 else:
-                    self.log(f"TikTok 并发降级下载（第 {attempt} 次，-N {workers}）：")
+                    self.log(f"TikTok 下载阶段重试（第 {attempt} 次，-N {workers}）：")
                 self.log(url)
 
+                task_debug(f"[RESOLVE] task_id={task_id} attempt={attempt} status=START")
                 ok, output_text = self._run_ytdlp(cmd)
 
+                # 从 yt-dlp 实际输出记录 challenge solver 与失败阶段真实状态
+                solver = self._detect_challenge_solver(output_text)
+                task_debug(f"[CHALLENGE] task_id={task_id} attempt={attempt} challenge_solver={solver}")
+
                 if ok:
+                    task_debug(f"[RESOLVE] task_id={task_id} attempt={attempt} status=SUCCESS")
+                    task_debug(f"[DOWNLOAD] task_id={task_id} attempt={attempt} status=SUCCESS")
+                    task_debug(f"[YTDLP RESULT] task_id={task_id} attempt={attempt} "
+                               f"resolve=SUCCESS download=SUCCESS error_class=NA")
                     result = "SUCCESS"
                     return True
 
@@ -2151,37 +2585,75 @@ class DownloadThread(QThread):
                     result = "ABORTED"
                     return False
 
-                # 不猜测错误原因：记录 yt-dlp 真实错误，
-                # 只有明确的认证/登录/Cookie 提示才标 AUTH / COOKIE
+                # 记录真实错误与失败阶段（不猜测）
                 final_class = self._classify_error(output_text)
                 error_message = self._first_error_message(output_text)
+                last_stage = self._detect_failed_stage(output_text)
+                if last_stage == "RESOLVE":
+                    task_debug(f"[RESOLVE] task_id={task_id} attempt={attempt} status=FAILED")
+                else:
+                    task_debug(f"[RESOLVE] task_id={task_id} attempt={attempt} status=SUCCESS")
+                    task_debug(f"[DOWNLOAD] task_id={task_id} attempt={attempt} status=FAILED")
+                task_debug(f"[YTDLP RESULT] task_id={task_id} attempt={attempt} "
+                           f"resolve={'FAILED' if last_stage == 'RESOLVE' else 'SUCCESS'} "
+                           f"download={'FAILED' if last_stage == 'DOWNLOAD' else 'NA'} "
+                           f"error_class={final_class}")
                 task_debug_section("ERROR", [
                     ("task_id", task_id),
                     ("attempt", attempt),
                     ("class", final_class),
+                    ("stage", last_stage),
                     ("message", error_message),
+                    ("action", action),
+                    ("challenge_solver", solver),
                 ])
                 task_debug(
                     "[YTDLP STDERR]",
                     *output_text.splitlines()[-40:],
                     ""
                 )
-                self.log(f"[ERROR] class={final_class}")
+                self.log(f"[ERROR] class={final_class} stage={last_stage}")
                 self.log(f"[ERROR] message={error_message}")
+                last_error = error_message
 
-                if attempt == 2:
-                    self.log("")
-                    self.log("[TikTok] ⚠ 并发降级（-N 4）后仍失败，结束任务")
-                    self.log("[TikTok] 建议：在浏览器中打开 TikTok 页面，等扩展同步最新 Cookie 后，右键失败链接 → 重试")
-                    return False
+                if attempt >= self.TIKTOK_MAX_ATTEMPTS:
+                    break
 
+                # 决定下次尝试的策略：
+                # RESOLVE 失败 → 指数退避（解析失败与并发无关，不改 -N）
+                # DOWNLOAD 失败 → 并发降级 8 → 4（仅降一次）
+                if last_stage == "RESOLVE":
+                    delay = self.TIKTOK_RESOLVE_BACKOFF[min(attempt - 1, len(self.TIKTOK_RESOLVE_BACKOFF) - 1)]
+                    workers = self.TIKTOK_RESOLVE_WORKERS
+                    self.log(f"[TikTok] 网页解析失败（{final_class}），等待 {delay} 秒后重新构建请求重试...")
+                    time.sleep(delay)
+                else:
+                    if workers > self.TIKTOK_DOWNLOAD_FALLBACK_WORKERS:
+                        workers = self.TIKTOK_DOWNLOAD_FALLBACK_WORKERS
+                        self.log(f"[TikTok] 下载阶段失败，等待 {self.TIKTOK_DOWNLOAD_RETRY_DELAY} 秒后以 -N {workers} 重试...")
+                    else:
+                        self.log(f"[TikTok] 下载阶段失败（已为 -N {workers}），等待 {self.TIKTOK_DOWNLOAD_RETRY_DELAY} 秒后重试...")
+                    time.sleep(self.TIKTOK_DOWNLOAD_RETRY_DELAY)
+
+            self.log("")
+            self.log(f"[TikTok] ⚠ 已尝试 {self.TIKTOK_MAX_ATTEMPTS} 次（RESOLVE 指数退避 / DOWNLOAD -N 8→4）仍失败，结束任务")
+            self.log("[TikTok] 建议：在浏览器中打开 TikTok 页面，等扩展同步最新 Cookie 后，右键失败链接 → 重试")
             return False
         finally:
+            self.remove_session_cookie_copy(session_cookie_file, source_cookie_file)
+            task_debug_section("TIKTOK TASK END", [
+                ("task_id", task_id),
+                ("result", result),
+                ("attempts", attempts),
+                ("elapsed", f"{time.time() - task_start:.1f}s"),
+                ("final_error_class", final_class or "NA"),
+                ("final_failed_stage", last_stage if result != "SUCCESS" else "NA"),
+            ], bordered=True)
             self._task_log_end(task_id, result, attempts, task_start, final_class)
 
-    # ---- 错误分类（简化版） ----
-    # 只有 yt-dlp 明确返回认证/登录/Cookie 相关错误时才标 AUTH / COOKIE，
-    # 其余一律记录真实错误为 YTDLP，不猜测。
+    # ---- 错误分类（细化版，参考 OmniGet）----
+    # 按顺序匹配：EXTRACTOR / HTTP_403 / HTTP_429 / TIMEOUT / COOKIE / SESSION /
+    # AUTH / FORMAT / FFMPEG / NETWORK / DOWNLOAD，其余记 YTDLP，不猜测。
     AUTH_ERROR_INDICATORS = [
         "login required",
         "sign in to confirm",
@@ -2198,14 +2670,89 @@ class DownloadThread(QThread):
         "invalid cookie",
     ]
 
+    EXTRACTOR_ERROR_INDICATORS = [
+        "unable to extract",
+        "unexpected response from webpage",
+        "unable to download webpage",
+        "unable to extract universal data",
+        "rehydration",
+        "failed to extract",
+        "extraction aborted",
+        "unable to extract challenge",
+        "unable to solve js challenge",
+        "unsupported url",
+    ]
+
+    SESSION_ERROR_INDICATORS = [
+        "session",
+        "csrf",
+        "verify",
+        "captcha",
+    ]
+
+    FORMAT_ERROR_INDICATORS = [
+        "requested format is not available",
+        "no video formats found",
+        "format unavailable",
+        "unable to extract formats",
+    ]
+
+    DOWNLOAD_ERROR_INDICATORS = [
+        "unable to download video data",
+        "unable to download fragments",
+        "incomplete read",
+        "fragment is missing",
+        "connection reset",
+        "content too short",
+    ]
+
     def _classify_error(self, output_text):
-        """错误分类：COOKIE / AUTH / YTDLP（不猜测）"""
+        """错误分类（细化版）：返回具体错误类别，不猜测"""
         text = output_text.lower()
+        if any(ind in text for ind in self.EXTRACTOR_ERROR_INDICATORS):
+            return "EXTRACTOR"
+        if "http error 403" in text or "forbidden" in text:
+            return "HTTP_403"
+        if "http error 429" in text or "too many requests" in text:
+            return "HTTP_429"
+        if "timeout" in text or "timed out" in text:
+            return "TIMEOUT"
         if any(ind in text for ind in self.COOKIE_ERROR_INDICATORS):
             return "COOKIE"
+        if any(ind in text for ind in self.SESSION_ERROR_INDICATORS):
+            return "SESSION"
         if any(ind in text for ind in self.AUTH_ERROR_INDICATORS):
             return "AUTH"
+        if any(ind in text for ind in self.FORMAT_ERROR_INDICATORS):
+            return "FORMAT"
+        if "ffmpeg" in text and "error" in text:
+            return "FFMPEG"
+        if self._is_network_error(text):
+            return "NETWORK"
+        if any(ind in text for ind in self.DOWNLOAD_ERROR_INDICATORS):
+            return "DOWNLOAD"
         return "YTDLP"
+
+    # 需要重新读取扩展 Cookie 的错误类别（其余类别不刷新，避免无脑刷新）
+    COOKIE_REFRESH_CLASSES = ("EXTRACTOR", "SESSION", "COOKIE", "HTTP_403")
+
+    # RESOLVE 阶段标记：出现以下行说明已进入媒体下载阶段（解析已成功）
+    DOWNLOAD_STAGE_MARKERS = (
+        "[download] destination:",
+        "has already been downloaded",
+        "merging formats",
+    )
+
+    @classmethod
+    def _detect_failed_stage(cls, output_text):
+        """判定失败发生在 RESOLVE（网页解析/提取）还是 DOWNLOAD（媒体下载）阶段
+
+        依据 yt-dlp 实际输出：出现 [download] Destination 等标记即已进入下载阶段。
+        """
+        text = output_text.lower()
+        if any(m in text for m in cls.DOWNLOAD_STAGE_MARKERS):
+            return "DOWNLOAD"
+        return "RESOLVE"
 
     @staticmethod
     def _first_error_message(output_text):
@@ -2239,8 +2786,9 @@ class DownloadThread(QThread):
             ("ffmpeg_path", str(FFMPEG_EXE)),
         ])
 
-    def _task_log_request(self, task_id, cookie_args, ua, referer, attempt, concurrency):
-        """[REQUEST] + [ATTEMPT]：Cookie 只记存在性/条数/关键项存在性，不记真实值"""
+    def _task_log_request(self, task_id, cookie_args, ua, referer, attempt, concurrency,
+                          action=None, retry_reason=None, js_runtime_args=None):
+        """[REQUEST] + [ATTEMPT]：Cookie 只记存在性/条数/mtime/大小/关键项存在性，不记真实值"""
         cookie_path = cookie_args[1] if cookie_args else None
         if cookie_path:
             stats = task_cookie_stats(cookie_path)
@@ -2254,10 +2802,16 @@ class DownloadThread(QThread):
             ("ua", "true" if ua else "false"),
             ("referer", "true" if referer else "false"),
             ("concurrency", concurrency if concurrency is not None else "NA"),
+            ("action", action or "NA"),
+            ("js_runtime_args", js_runtime_args or "NA"),
             ("cookie_exists", str(stats["exists"]).lower()),
             ("cookie_count", stats["count"]),
+            ("cookie_size", stats["size"]),
+            ("cookie_mtime", stats["mtime"]),
             ("cookie_header", "REDACTED" if cookie_args else "NA"),
         ]
+        if retry_reason:
+            pairs.append(("retry_reason", retry_reason))
         for name in TASK_KEY_COOKIES:
             pairs.append((name, stats.get(name, "absent")))
         task_debug_section("REQUEST", pairs)
@@ -2266,6 +2820,53 @@ class DownloadThread(QThread):
             ("attempt", attempt),
             ("concurrency", concurrency if concurrency is not None else "NA"),
         ], bordered=True)
+
+    def _task_log_js_runtime(self, task_id, attempt):
+        """[JS RUNTIME]：下载前记录 Node 检测状态与实际传给 yt-dlp 的参数"""
+        runtime, path = self.js_runtime_info()
+        task_debug_section("JS RUNTIME", [
+            ("task_id", task_id),
+            ("attempt", attempt),
+            ("enabled", "true" if runtime else "false"),
+            ("runtime", runtime or "NA"),
+            ("path", path or "NA"),
+            ("js_runtime_args", self._js_runtime_spec()),
+        ])
+
+    def _task_log_cookie_ua_referer(self, task_id, cookie_args, ua, referer,
+                                    source_cookie_file=None, refreshed=False):
+        """[COOKIE] / [UA] / [REFERER] / [PROXY]：只记元信息，绝不记 Cookie 内容"""
+        cookie_path = cookie_args[1] if cookie_args else None
+        if source_cookie_file is None and cookie_path:
+            source_cookie_file = cookie_path
+        stats = task_cookie_stats(source_cookie_file) if source_cookie_file else None
+        cookie_pairs = [
+            ("task_id", task_id),
+            ("source", "extension" if source_cookie_file else "none"),
+            ("file", Path(source_cookie_file).name if source_cookie_file else "NA"),
+            ("session_copy", Path(cookie_path).name if cookie_path else "NA"),
+            ("exists", str(bool(stats and stats["exists"])).lower()),
+            ("size", stats["size"] if stats else 0),
+            ("mtime", stats["mtime"] if stats else "NA"),
+            ("refreshed", str(refreshed).lower()),
+        ]
+        task_debug_section("COOKIE", cookie_pairs)
+        task_debug_section("UA", [
+            ("task_id", task_id),
+            ("source", "extension" if UA_FILE.exists() else "default"),
+            ("length", len(ua) if ua else 0),
+        ])
+        task_debug_section("REFERER", [
+            ("task_id", task_id),
+            ("source", "extension" if referer else "NA"),
+            ("value", task_redact_url(referer) if referer else "NA"),
+        ])
+        task_debug_section("PROXY", [
+            ("task_id", task_id),
+            ("enabled", "false"),
+            ("source", "system"),
+            ("value", get_system_proxy_state()),
+        ])
 
     def _task_log_end(self, task_id, result, attempts, task_start, final_class):
         """[TASK END]"""
@@ -5085,10 +5686,14 @@ class MainWindow(QMainWindow):
         ytdlp_version = get_ytdlp_version()
         self.log(f"[YT-DLP] path={YTDLP_EXE}")
         self.log(f"[YT-DLP] version={ytdlp_version}")
+        self.log(f"[YT-DLP] source=local update_check=后台检查中（24小时间隔，失败不影响使用）")
         task_debug_section("YT-DLP", [
             ("path", str(YTDLP_EXE)),
             ("version", ytdlp_version),
+            ("source", "local"),
         ])
+        # 后台轻量版本检查/更新（非阻塞；失败保留当前版本，不影响启动）
+        check_ytdlp_update_async()
         task_debug_section("ENVIRONMENT CHECK", env_rows)
 
         self.log(
