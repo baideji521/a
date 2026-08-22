@@ -10,6 +10,8 @@ import threading
 import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
+from urllib.parse import urlparse
+
 from PyQt5.QtGui import QIcon
 
 from PyQt5.QtCore import (
@@ -2429,16 +2431,18 @@ class DownloadThread(QThread):
         process.wait()
         return process.returncode == 0, "\n".join(stderr_output)
 
-    # ---- TikTok 两阶段重试（参考 OmniGet，唯一的 TikTok 专用增强）----
-    # 阶段 1 RESOLVE：网页解析/提取。失败 → 指数退避（2/6/12 秒），
-    #   仅在错误类别需要时重新读取扩展 Cookie/UA/Referer，-N 保持 8。
-    # 阶段 2 DOWNLOAD：媒体分片下载。失败 → 并发降级 -N 8 → -N 4，不刷新 Cookie。
-    # 总尝试上限 4 次；不管理代理、不连接浏览器、禁止无限重试。
-    TIKTOK_MAX_ATTEMPTS = 4
-    TIKTOK_RESOLVE_BACKOFF = (2, 6, 12)  # RESOLVE 重试前的指数退避（秒）
+    # ---- TikTok 两阶段重试（唯一的 TikTok 专用增强）----
+    # 阶段 1 RESOLVE：网页解析/提取。失败 → Recovery：无条件重读扩展
+    #   Cookie/UA/Referer 重建请求，指数退避 2/6/12 秒，最多 3 次，
+    #   -N 始终保持 8（解析失败与并发无关）。
+    # 阶段 2 DOWNLOAD：媒体分片下载。失败 → 等 5 秒降为 -N 4 重试一次，
+    #   仍失败则任务失败，不刷新 Cookie、不继续降级。
+    # 不管理代理、不连接浏览器、禁止无限重试。
+    TIKTOK_RESOLVE_MAX_RECOVERIES = 3  # RESOLVE Recovery 上限（不含首次）
+    TIKTOK_RESOLVE_BACKOFF = (2, 6, 12)  # RESOLVE Recovery 前的指数退避（秒）
     TIKTOK_DOWNLOAD_RETRY_DELAY = 5  # DOWNLOAD 并发降级前等待（秒）
     TIKTOK_RESOLVE_WORKERS = 8  # RESOLVE 阶段并发（解析失败与并发无关，保持 8）
-    TIKTOK_DOWNLOAD_FALLBACK_WORKERS = 4  # DOWNLOAD 失败后的降级并发
+    TIKTOK_DOWNLOAD_FALLBACK_WORKERS = 4  # DOWNLOAD 失败后的降级并发（仅降一次）
 
     @staticmethod
     def _node_path():
@@ -2468,8 +2472,328 @@ class DownloadThread(QThread):
             return "unknown"
         return "NA"
 
+    # ---- TikTok Native Extractor（参考 OmniGet tonhowtf/omniget）----
+    # 原生 HTTP 请求 + JSON 解析直接获取视频 URL，绕过 yt-dlp JS Challenge；
+    # 失败时无条件回退现有 yt-dlp 流程（含全部重试机制）。
+
+    @staticmethod
+    def _tiktok_extract_post_id(url):
+        """从 TikTok URL 提取视频 ID（移植自 OmniGet extract_post_id）"""
+        try:
+            parsed = urlparse(url)
+            segments = [s for s in parsed.path.split('/') if s]
+            if (len(segments) >= 3
+                    and segments[0].startswith('@')
+                    and segments[1] in ('video', 'photo')
+                    and segments[2].isdigit()):
+                return segments[2]
+        except Exception:
+            pass
+        return None
+
+    def _tiktok_resolve_short_link(self, url):
+        """解析 TikTok 短链到完整 URL（移植自 OmniGet resolve_short_link）"""
+        try:
+            import http.client
+            parsed = urlparse(url)
+            conn_cls = http.client.HTTPSConnection if parsed.scheme == 'https' else http.client.HTTPConnection
+            conn = conn_cls(parsed.hostname, timeout=15)
+            path = parsed.path
+            if parsed.query:
+                path += '?' + parsed.query
+            conn.request("GET", path, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+            })
+            resp = conn.getresponse()
+            if resp.status in (301, 302, 303, 307, 308):
+                location = resp.getheader("Location", "")
+                if location:
+                    clean = location.split('?')[0]
+                    conn.close()
+                    return clean
+            body = resp.read(4096).decode('utf-8', errors='ignore')
+            conn.close()
+            if body.startswith('<a href="https://'):
+                url_part = body.split('<a href="')[1].split('"')[0]
+                return url_part.split('?')[0]
+        except Exception:
+            pass
+        return url
+
+    @staticmethod
+    def _tiktok_is_captcha_page(html):
+        """检测 TikTok 验证码页面（移植自 OmniGet is_captcha_page）"""
+        return ("verify-bar-close" in html
+                or "captcha_verify" in html
+                or "tiktok-verify-page" in html
+                or "verify/page" in html
+                or ("Verify to continue" in html
+                    and "__UNIVERSAL_DATA_FOR_REHYDRATION__" not in html))
+
+    @staticmethod
+    def _tiktok_is_valid_play_addr(url):
+        """验证视频 URL 有效性（移植自 OmniGet is_valid_play_addr）"""
+        if not url or not isinstance(url, str):
+            return False
+        if not url.startswith("http://") and not url.startswith("https://"):
+            return False
+        if "verify" in url or "captcha" in url:
+            return False
+        return True
+
+    @staticmethod
+    def _tiktok_parse_cookies(cookie_file_path):
+        """从 Netscape Cookie 文件解析 TikTok Cookie 并构建 Cookie header 字符串"""
+        try:
+            import http.cookiejar as cj
+            jar = cj.MozillaCookieJar()
+            jar.load(str(cookie_file_path), ignore_discard=True, ignore_expires=True)
+            parts = []
+            for c in jar:
+                if c.domain and 'tiktok' in c.domain:
+                    parts.append(f"{c.name}={c.value}")
+            if parts:
+                return "; ".join(parts), len(parts)
+        except Exception:
+            pass
+        return None, 0
+
+    def _tiktok_native_extract(self, url):
+        """原生 HTTP 获取 TikTok 视频详情（curl_cffi Session，不带 Cookie 避免 WAF）
+
+        返回 dict: {author, filename_base, post_id, video_url, duration, session} 或 None
+        session 用于后续下载（自动携带页面响应 Cookie）
+        """
+        post_id = self._tiktok_extract_post_id(url)
+        if not post_id:
+            canonical = self._tiktok_resolve_short_link(url)
+            post_id = self._tiktok_extract_post_id(canonical)
+            if not post_id:
+                task_debug("[NATIVE] Cannot extract post_id from URL")
+                return None
+
+        fetch_url = f"https://www.tiktok.com/@i/video/{post_id}"
+        task_debug(f"[NATIVE] fetch_url={fetch_url} post_id={post_id}")
+
+        try:
+            from curl_cffi import requests as _cffi
+
+            headers = {
+                "Referer": "https://www.tiktok.com/",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "Upgrade-Insecure-Requests": "1",
+            }
+
+            # 关键：使用 Session 不带 Cookie 请求，避免触发 WAF；
+            # Session 自动捕获页面响应 Cookie（ttwid 等），供后续下载使用
+            session = _cffi.Session(impersonate="chrome131")
+            resp = session.get(
+                fetch_url,
+                headers=headers,
+                timeout=30,
+            )
+
+            if resp.status_code != 200:
+                task_debug(f"[NATIVE] HTTP {resp.status_code}")
+                return None
+
+            html = resp.text
+
+            if not html:
+                task_debug("[NATIVE] empty response")
+                return None
+
+            if self._tiktok_is_captcha_page(html):
+                task_debug("[NATIVE] captcha page detected")
+                return None
+
+            # 检测 WAF 挑战页面
+            if "SlardarWAF" in html or "wafchallenge" in html:
+                task_debug("[NATIVE] WAF challenge page detected")
+                return None
+
+            marker = '__UNIVERSAL_DATA_FOR_REHYDRATION__'
+            if marker not in html:
+                task_debug(f"[NATIVE] {marker} not found")
+                return None
+
+            try:
+                json_str = html.split(
+                    f'<script id="{marker}" type="application/json">'
+                )[1].split('</script>')[0]
+                data = json.loads(json_str)
+            except (IndexError, json.JSONDecodeError) as e:
+                task_debug(f"[NATIVE] JSON parse error: {e}")
+                return None
+
+            video_detail = data.get("__DEFAULT_SCOPE__", {}).get("webapp.video-detail")
+            if not video_detail:
+                task_debug("[NATIVE] webapp.video-detail not found")
+                return None
+
+            status_msg = video_detail.get("statusMsg", "")
+            if status_msg:
+                task_debug(f"[NATIVE] statusMsg: {status_msg}")
+                return None
+
+            status_code = video_detail.get("statusCode")
+            if status_code is not None and status_code != 0:
+                task_debug(f"[NATIVE] statusCode: {status_code}")
+                return None
+
+            detail = video_detail.get("itemInfo", {}).get("itemStruct")
+            if not detail:
+                task_debug("[NATIVE] itemStruct not found")
+                return None
+
+            if detail.get("isContentClassified"):
+                task_debug("[NATIVE] age-restricted content")
+                return None
+
+            if not detail.get("author"):
+                task_debug("[NATIVE] no author info")
+                return None
+
+            author = (detail.get("author", {}).get("uniqueId")
+                      or detail.get("author", {}).get("unique_id")
+                      or "unknown")
+            filename_base = f"tiktok_{safe_filename(author)}_{post_id}"
+
+            video_url = None
+            vdata = detail.get("video", {})
+
+            pa = vdata.get("playAddr")
+            if isinstance(pa, str) and self._tiktok_is_valid_play_addr(pa):
+                video_url = pa
+
+            if not video_url:
+                ul = vdata.get("play_addr", {}).get("urlList", [])
+                if isinstance(ul, list):
+                    for u in ul:
+                        if isinstance(u, str) and self._tiktok_is_valid_play_addr(u):
+                            video_url = u
+                            break
+
+            if not video_url:
+                da = vdata.get("downloadAddr")
+                if isinstance(da, str) and self._tiktok_is_valid_play_addr(da):
+                    video_url = da
+
+            if not video_url:
+                bi = vdata.get("bitrateInfo", [])
+                if isinstance(bi, list):
+                    for b in bi:
+                        ul2 = b.get("PlayAddr", {}).get("UrlList", [])
+                        if isinstance(ul2, list):
+                            for u in ul2:
+                                if isinstance(u, str) and self._tiktok_is_valid_play_addr(u):
+                                    video_url = u
+                                    break
+                        if video_url:
+                            break
+
+            if not video_url:
+                task_debug("[NATIVE] no valid video URL found")
+                return None
+
+            duration = vdata.get("duration")
+            task_debug(f"[NATIVE] OK author={author} post_id={post_id} "
+                       f"dur={duration} url_len={len(video_url)}")
+
+            return {
+                "author": author,
+                "filename_base": filename_base,
+                "post_id": post_id,
+                "video_url": video_url,
+                "duration": duration,
+                "session": session,
+            }
+        except ImportError:
+            task_debug("[NATIVE] curl_cffi not installed, native extract unavailable")
+            return None
+        except Exception as e:
+            task_debug(f"[NATIVE] exception: {e}")
+            return None
+
+    def _tiktok_native_download(self, video_url, output_path, session=None):
+        """原生 HTTP 直接下载 TikTok 视频（使用 session 携带页面响应 Cookie）"""
+        task_debug(f"[NATIVE_DL] url_len={len(video_url)} output={output_path} session={'yes' if session else 'no'}")
+        try:
+            from curl_cffi import requests as _cffi
+
+            headers = {
+                "Referer": "https://www.tiktok.com/",
+                "Accept": "*/*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "identity",
+            }
+
+            # 使用 extract 阶段的 session（自动携带 ttwid 等 Cookie）
+            if session:
+                resp = session.get(
+                    video_url,
+                    headers=headers,
+                    timeout=120,
+                    stream=True,
+                )
+            else:
+                resp = _cffi.get(
+                    video_url,
+                    impersonate="chrome131",
+                    headers=headers,
+                    timeout=120,
+                    stream=True,
+                )
+
+            if resp.status_code != 200:
+                task_debug(f"[NATIVE_DL] status={resp.status_code}")
+                return False
+
+            ct = resp.headers.get('Content-Type', '')
+            if 'text/html' in ct or 'application/json' in ct:
+                task_debug(f"[NATIVE_DL] unexpected content-type: {ct}")
+                return False
+
+            total = int(resp.headers.get('Content-Length', 0))
+            task_debug(f"[NATIVE_DL] content-type={ct} size={total}")
+
+            output_path = Path(output_path)
+            downloaded = 0
+            with open(output_path, 'wb') as f:
+                for chunk in resp.iter_content(chunk_size=262144):
+                    if self.stop_flag or self.skip_flag:
+                        return False
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total > 0:
+                            self.progress_signal.emit(min(int(downloaded * 100 / total), 99))
+
+            if total > 0 and downloaded < total * 0.95:
+                task_debug(f"[NATIVE_DL] incomplete: {downloaded}/{total}")
+                return False
+
+            task_debug(f"[NATIVE_DL] complete: {downloaded} bytes")
+            self.progress_signal.emit(100)
+            return True
+        except ImportError:
+            task_debug("[NATIVE_DL] curl_cffi not installed")
+            return False
+        except Exception as e:
+            task_debug(f"[NATIVE_DL] exception: {e}")
+            return False
+
     def _download_tiktok(self, url, job_dir):
-        """TikTok 两阶段下载：RESOLVE 失败→指数退避重读状态；DOWNLOAD 失败→-N 8→4 降级"""
+        """TikTok Native + yt-dlp fallback 两阶段下载：
+        Native HTTP 优先获取页面解析视频 URL 直接下载；
+        Native 失败→回退现有 yt-dlp 流程（含全部重试机制）。
+        """
         task_id = secrets.token_hex(3).upper()
         task_start = time.time()
         self._task_log_start(task_id, url, "tiktok")
@@ -2479,34 +2803,79 @@ class DownloadThread(QThread):
             ("time", time.strftime("%Y-%m-%d %H:%M:%S")),
         ], bordered=True)
 
+        # ---- TikTok Native Extractor（第一优先级）----
+        # 原生 HTTP 直接获取页面 → 解析 JSON → 提取视频 URL → 直接下载
+        # 成功则跳过 yt-dlp，失败则无条件落入下方现有 yt-dlp 流程
+        native_used = False
+        task_debug(f"[NATIVE] task_id={task_id} attempting native extract")
+        native_info = self._tiktok_native_extract(url)
+        if native_info:
+            video_url = native_info["video_url"]
+            filename = f"{native_info['filename_base']}.mp4"
+            output_path = job_dir / filename
+            task_debug(f"[NATIVE] task_id={task_id} extract OK, attempting native download")
+            self.log(f"[TikTok Native] 页面解析成功，直接下载中...")
+            native_session = native_info.get("session")
+            if self._tiktok_native_download(video_url, output_path, session=native_session):
+                native_used = True
+                task_debug(f"[NATIVE] task_id={task_id} native download SUCCESS")
+                self.log(f"[TikTok Native] 下载完成！")
+                result = "SUCCESS"
+                final_class = None
+                final_category = None
+                final_reason = None
+                last_error = None
+                return True
+            else:
+                task_debug(f"[NATIVE] task_id={task_id} native download FAILED, falling back to yt-dlp")
+                self.log(f"[TikTok Native] 直接下载失败，回退 yt-dlp...")
+                try:
+                    if output_path.exists():
+                        output_path.unlink()
+                except Exception:
+                    pass
+        else:
+            task_debug(f"[NATIVE] task_id={task_id} native extract FAILED, falling back to yt-dlp")
+            self.log(f"[TikTok Native] 页面解析失败，使用 yt-dlp...")
+
+        # ---- 现有 yt-dlp 流程（fallback）----
         result = "FAILED"
         final_class = None
+        final_category = None
+        final_reason = None
         attempts = 0
         last_error = None
         last_stage = "RESOLVE"
+        # 首次失败记录（即使最终恢复成功也保留，便于判断“第一次失败是什么、最终有没有恢复”）
+        initial_class = None
+        initial_reason = None
+        initial_message = None
         workers = self.TIKTOK_RESOLVE_WORKERS
         refreshed_cookie = False
-        source_cookie_file = None
-        session_cookie_file = None
+        # Cookie 文件状态用容器持有（避免嵌套函数赋值导致外层引用不一致，
+        # 确保 finally 能拿到最新副本路径完成清理）
+        cookie_state = {"source": None, "session": None}
         ua = cookie_args = referer = None
 
         def _read_state():
-            """重新读取扩展同步的 UA / Referer，并按需重建 Cookie 临时副本"""
-            nonlocal ua, referer, cookie_args, source_cookie_file, session_cookie_file, refreshed_cookie
+            """重新读取扩展同步的 Cookie / UA / Referer，重建 Cookie 临时副本"""
+            nonlocal ua, referer, cookie_args, refreshed_cookie
             ua = self.get_ua()
             referer = self.get_referer(url)
-            source_cookie_file = self.resolve_cookie_file(url)
-            if source_cookie_file:
-                self.remove_session_cookie_copy(session_cookie_file, source_cookie_file)
-                session_cookie_file = self.make_session_cookie_copy(source_cookie_file, task_id)
-                cookie_args = (["--cookies", str(session_cookie_file or source_cookie_file)])
+            cookie_state["source"] = self.resolve_cookie_file(url)
+            if cookie_state["source"]:
+                self.remove_session_cookie_copy(cookie_state["session"], cookie_state["source"])
+                cookie_state["session"] = self.make_session_cookie_copy(cookie_state["source"], task_id)
+                cookie_args = (["--cookies", str(cookie_state["session"] or cookie_state["source"])])
             else:
                 cookie_args = []
             refreshed_cookie = True
 
         try:
             attempt = 0
-            while attempt < self.TIKTOK_MAX_ATTEMPTS:
+            resolve_recoveries = 0
+            download_downgraded = False
+            while True:
                 if self.stop_flag or self.skip_flag:
                     result = "ABORTED"
                     return False
@@ -2517,18 +2886,20 @@ class DownloadThread(QThread):
                 if attempt == 1:
                     action = "INITIAL_READ"
                     _read_state()
-                else:
+                elif last_stage == "RESOLVE":
+                    # RESOLVE Recovery：无条件重读 Cookie/UA/Referer 重建请求（日志已证明
+                    # 扩展刷新后 Cookie 条数/会话状态确实变化），-N 始终保持 8。
                     action = "REFRESH_BROWSER_STATE"
                     self._cleanup_job_dir(job_dir)
-                    # Cookie 只在需要时重新读取（解析/会话/403 类错误），
-                    # 普通下载失败不刷新；UA/Referer 每次重读开销极低，始终重读。
-                    if last_stage == "RESOLVE" and last_error and \
-                            self._classify_error(last_error) in self.COOKIE_REFRESH_CLASSES:
-                        _read_state()
-                    else:
-                        ua = self.get_ua()
-                        referer = self.get_referer(url)
-                        refreshed_cookie = False
+                    _read_state()
+                else:
+                    # DOWNLOAD Recovery：只降并发重建命令，不刷新 Cookie（媒体下载与会话无关）；
+                    # 同时清理 job_dir 残留的 .part（损坏的部分文件会导致续传反复失败）
+                    action = "CONCURRENCY_DOWNGRADE"
+                    self._cleanup_job_dir(job_dir)
+                    ua = self.get_ua()
+                    referer = self.get_referer(url)
+                    refreshed_cookie = False
 
                 retry_reason = last_error if attempt > 1 else None
                 self._task_log_request(
@@ -2537,7 +2908,7 @@ class DownloadThread(QThread):
                     js_runtime_args=self._js_runtime_spec(),
                 )
                 self._task_log_cookie_ua_referer(task_id, cookie_args, ua, referer,
-                                                 source_cookie_file, refreshed_cookie)
+                                                 cookie_state["source"], refreshed_cookie)
 
                 cmd = self.build_ytdlp_args(
                     url, job_dir, ua, cookie_args,
@@ -2561,9 +2932,9 @@ class DownloadThread(QThread):
                 if attempt == 1:
                     self.log("开始下载：")
                 elif last_stage == "RESOLVE":
-                    self.log(f"TikTok 解析重试（第 {attempt} 次，已重新构建请求环境）：")
+                    self.log(f"TikTok RESOLVE Recovery（第 {resolve_recoveries}/3 次，已刷新 Cookie/UA/Referer 并重建请求）：")
                 else:
-                    self.log(f"TikTok 下载阶段重试（第 {attempt} 次，-N {workers}）：")
+                    self.log(f"TikTok DOWNLOAD 重试（-N {workers}）：")
                 self.log(url)
 
                 task_debug(f"[RESOLVE] task_id={task_id} attempt={attempt} status=START")
@@ -2579,6 +2950,11 @@ class DownloadThread(QThread):
                     task_debug(f"[YTDLP RESULT] task_id={task_id} attempt={attempt} "
                                f"resolve=SUCCESS download=SUCCESS error_class=NA")
                     result = "SUCCESS"
+                    # 成功时最终错误状态必须为 NONE（即使中途发生过失败）
+                    final_class = None
+                    final_category = None
+                    final_reason = None
+                    last_error = None
                     return True
 
                 if self.stop_flag or self.skip_flag:
@@ -2589,6 +2965,8 @@ class DownloadThread(QThread):
                 final_class = self._classify_error(output_text)
                 error_message = self._first_error_message(output_text)
                 last_stage = self._detect_failed_stage(output_text)
+                final_category = self._task_error_category(last_stage, final_class)
+                final_reason = self._resolve_reason(output_text) if last_stage == "RESOLVE" else final_class
                 if last_stage == "RESOLVE":
                     task_debug(f"[RESOLVE] task_id={task_id} attempt={attempt} status=FAILED")
                 else:
@@ -2597,12 +2975,14 @@ class DownloadThread(QThread):
                 task_debug(f"[YTDLP RESULT] task_id={task_id} attempt={attempt} "
                            f"resolve={'FAILED' if last_stage == 'RESOLVE' else 'SUCCESS'} "
                            f"download={'FAILED' if last_stage == 'DOWNLOAD' else 'NA'} "
-                           f"error_class={final_class}")
+                           f"error_class={final_category} reason={final_reason}")
                 task_debug_section("ERROR", [
                     ("task_id", task_id),
                     ("attempt", attempt),
                     ("class", final_class),
+                    ("category", final_category),
                     ("stage", last_stage),
+                    ("reason", final_reason),
                     ("message", error_message),
                     ("action", action),
                     ("challenge_solver", solver),
@@ -2612,44 +2992,79 @@ class DownloadThread(QThread):
                     *output_text.splitlines()[-40:],
                     ""
                 )
-                self.log(f"[ERROR] class={final_class} stage={last_stage}")
+                self.log(f"[ERROR] class={final_category} stage={last_stage} reason={final_reason}")
                 self.log(f"[ERROR] message={error_message}")
                 last_error = error_message
+                if initial_class is None:
+                    initial_class = final_category
+                    initial_reason = final_reason
+                    initial_message = error_message
 
-                if attempt >= self.TIKTOK_MAX_ATTEMPTS:
-                    break
-
-                # 决定下次尝试的策略：
-                # RESOLVE 失败 → 指数退避（解析失败与并发无关，不改 -N）
-                # DOWNLOAD 失败 → 并发降级 8 → 4（仅降一次）
+                # 决定下次尝试的策略（RESOLVE 失败≠DOWNLOAD 失败，严格区分）：
+                # RESOLVE 失败 → Recovery：刷新 Cookie/UA/Referer + 重建，指数退避，-N 保持 8，最多 3 次；
+                # DOWNLOAD 失败 → 等 5 秒降 -N 8→4 重试一次，仍失败即终止。
                 if last_stage == "RESOLVE":
-                    delay = self.TIKTOK_RESOLVE_BACKOFF[min(attempt - 1, len(self.TIKTOK_RESOLVE_BACKOFF) - 1)]
+                    if resolve_recoveries >= self.TIKTOK_RESOLVE_MAX_RECOVERIES:
+                        break
+                    resolve_recoveries += 1
+                    delay = self.TIKTOK_RESOLVE_BACKOFF[min(resolve_recoveries - 1, len(self.TIKTOK_RESOLVE_BACKOFF) - 1)]
                     workers = self.TIKTOK_RESOLVE_WORKERS
-                    self.log(f"[TikTok] 网页解析失败（{final_class}），等待 {delay} 秒后重新构建请求重试...")
+                    task_debug_section("TIKTOK RECOVERY", [
+                        ("task_id", task_id),
+                        ("stage", "RESOLVE"),
+                        ("attempt", attempt + 1),
+                        ("reason", final_reason),
+                        ("action", "REFRESH_COOKIE"),
+                        ("action", "REFRESH_UA"),
+                        ("action", "REFRESH_REFERER"),
+                        ("action", "REBUILD_YTDLP_ARGS"),
+                        ("concurrency", workers),
+                        ("wait", f"{delay}s"),
+                    ])
+                    self.log(f"[TikTok] RESOLVE 失败（{final_reason}），等待 {delay} 秒后刷新 Cookie/UA/Referer 重建请求重试（-N {workers}）...")
                     time.sleep(delay)
                 else:
-                    if workers > self.TIKTOK_DOWNLOAD_FALLBACK_WORKERS:
-                        workers = self.TIKTOK_DOWNLOAD_FALLBACK_WORKERS
-                        self.log(f"[TikTok] 下载阶段失败，等待 {self.TIKTOK_DOWNLOAD_RETRY_DELAY} 秒后以 -N {workers} 重试...")
-                    else:
-                        self.log(f"[TikTok] 下载阶段失败（已为 -N {workers}），等待 {self.TIKTOK_DOWNLOAD_RETRY_DELAY} 秒后重试...")
+                    if download_downgraded:
+                        break
+                    download_downgraded = True
+                    workers = self.TIKTOK_DOWNLOAD_FALLBACK_WORKERS
+                    task_debug_section("TIKTOK RECOVERY", [
+                        ("task_id", task_id),
+                        ("stage", "DOWNLOAD"),
+                        ("attempt", attempt + 1),
+                        ("reason", final_class),
+                        ("action", "CONCURRENCY_DOWNGRADE"),
+                        ("action", "REBUILD_YTDLP_ARGS"),
+                        ("concurrency", workers),
+                        ("wait", f"{self.TIKTOK_DOWNLOAD_RETRY_DELAY}s"),
+                    ])
+                    self.log(f"[TikTok] DOWNLOAD 失败，等待 {self.TIKTOK_DOWNLOAD_RETRY_DELAY} 秒后以 -N {workers} 重试...")
                     time.sleep(self.TIKTOK_DOWNLOAD_RETRY_DELAY)
 
             self.log("")
-            self.log(f"[TikTok] ⚠ 已尝试 {self.TIKTOK_MAX_ATTEMPTS} 次（RESOLVE 指数退避 / DOWNLOAD -N 8→4）仍失败，结束任务")
-            self.log("[TikTok] 建议：在浏览器中打开 TikTok 页面，等扩展同步最新 Cookie 后，右键失败链接 → 重试")
+            if last_stage == "RESOLVE":
+                self.log(f"[TikTok] ⚠ RESOLVE 已完成 {self.TIKTOK_RESOLVE_MAX_RECOVERIES} 次 Recovery 仍失败，结束任务")
+                self.log("[TikTok] 建议：在浏览器中打开 TikTok 页面，等扩展同步最新 Cookie 后，右键失败链接 → 重试")
+            else:
+                self.log(f"[TikTok] ⚠ DOWNLOAD 已降为 -N {self.TIKTOK_DOWNLOAD_FALLBACK_WORKERS} 仍失败，结束任务")
             return False
         finally:
-            self.remove_session_cookie_copy(session_cookie_file, source_cookie_file)
+            self.remove_session_cookie_copy(cookie_state["session"], cookie_state["source"])
             task_debug_section("TIKTOK TASK END", [
                 ("task_id", task_id),
                 ("result", result),
                 ("attempts", attempts),
                 ("elapsed", f"{time.time() - task_start:.1f}s"),
-                ("final_error_class", final_class or "NA"),
-                ("final_failed_stage", last_stage if result != "SUCCESS" else "NA"),
+                ("initial_error_class", initial_class or "NONE"),
+                ("initial_error", initial_reason or "NONE"),
+                ("initial_message", (initial_message or "NONE") if result != "SUCCESS" else "NONE"),
+                ("final_error_class", final_category or "NONE"),
+                ("final_error", final_reason or "NONE"),
+                ("final_failed_stage", last_stage if result not in ("SUCCESS", "ABORTED") else "NA"),
             ], bordered=True)
-            self._task_log_end(task_id, result, attempts, task_start, final_class)
+            self._task_log_end(task_id, result, attempts, task_start,
+                               final_category, final_reason,
+                               initial_class, initial_reason)
 
     # ---- 错误分类（细化版，参考 OmniGet）----
     # 按顺序匹配：EXTRACTOR / HTTP_403 / HTTP_429 / TIMEOUT / COOKIE / SESSION /
@@ -2684,9 +3099,12 @@ class DownloadThread(QThread):
     ]
 
     SESSION_ERROR_INDICATORS = [
-        "session",
+        # 用短语匹配，避免 session/verify 等子串误分类（日志准确性，不影响恢复策略）
+        "session error",
+        "session expired",
+        "invalid session",
+        "session cookies are not supported",
         "csrf",
-        "verify",
         "captcha",
     ]
 
@@ -2733,8 +3151,38 @@ class DownloadThread(QThread):
             return "DOWNLOAD"
         return "YTDLP"
 
-    # 需要重新读取扩展 Cookie 的错误类别（其余类别不刷新，避免无脑刷新）
-    COOKIE_REFRESH_CLASSES = ("EXTRACTOR", "SESSION", "COOKIE", "HTTP_403")
+    # 任务级错误分类：在细分类基础上按失败阶段映射为
+    # TIKTOK_RESOLVE / TIKTOK_DOWNLOAD / COOKIE / NETWORK / YTDLP / FFMPEG / UNKNOWN
+    def _task_error_category(self, stage, fine_class):
+        """细分类 → 任务级分类（日志用）；不猜测，无法判断记 UNKNOWN"""
+        if fine_class == "COOKIE":
+            return "COOKIE"
+        if fine_class in ("NETWORK", "TIMEOUT"):
+            return "NETWORK"
+        if fine_class == "FFMPEG":
+            return "FFMPEG"
+        if stage == "RESOLVE":
+            return "TIKTOK_RESOLVE"
+        if stage == "DOWNLOAD":
+            return "TIKTOK_DOWNLOAD"
+        if fine_class:
+            return "YTDLP"
+        return "UNKNOWN"
+
+    def _resolve_reason(self, output_text):
+        """RESOLVE 失败的具体原因码（保留原始错误语义，供 [TIKTOK RECOVERY] 使用）"""
+        text = (output_text or "").lower()
+        if "universal data" in text or "rehydration" in text:
+            return "UNIVERSAL_DATA"
+        if "unexpected response from webpage" in text:
+            return "WEBPAGE_RESPONSE"
+        if "http error 403" in text or "forbidden" in text:
+            return "HTTP_403"
+        if "unable to download webpage" in text:
+            return "WEBPAGE_DOWNLOAD"
+        if "js challenge" in text:
+            return "CHALLENGE"
+        return self._classify_error(output_text)
 
     # RESOLVE 阶段标记：出现以下行说明已进入媒体下载阶段（解析已成功）
     DOWNLOAD_STAGE_MARKERS = (
@@ -2868,14 +3316,19 @@ class DownloadThread(QThread):
             ("value", get_system_proxy_state()),
         ])
 
-    def _task_log_end(self, task_id, result, attempts, task_start, final_class):
-        """[TASK END]"""
+    def _task_log_end(self, task_id, result, attempts, task_start, final_class,
+                      final_reason=None, initial_class=None, initial_reason=None):
+        """[TASK END]：成功时最终错误状态必须为 NONE，同时保留首次失败记录"""
+        success = result == "SUCCESS"
         task_debug_section("TASK END", [
             ("task_id", task_id),
             ("result", result),
             ("attempts", attempts),
             ("elapsed", f"{time.time() - task_start:.1f}s"),
-            ("final_error_class", final_class or "NA"),
+            ("initial_error_class", initial_class or "NONE"),
+            ("initial_error", initial_reason or "NONE"),
+            ("final_error_class", "NONE" if success else (final_class or "UNKNOWN")),
+            ("final_error", "NONE" if success else (final_reason or (final_class or "UNKNOWN"))),
         ], bordered=True)
 
     def find_source_file(
