@@ -52,7 +52,8 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
     QFrame,
     QSizePolicy,
-    QSpacerItem
+    QSpacerItem,
+    QCheckBox
 )
 
 
@@ -105,6 +106,8 @@ LINK_FILE = RUN_DIR / "link.txt"
 TEMP_DIR = RUN_DIR / "_download_temp"
 
 DEFAULT_OUTPUT_DIR = RUN_DIR / "downloads"
+
+VIDEO_DNA_FILE = RUN_DIR / "video_dna.txt"
 
 CONFIG_FILE = RUN_DIR / "config.json"
 
@@ -496,7 +499,7 @@ DEFAULT_CONFIG = {
 
     "bridge_token": "",
 
-    "bridge_port": 47720
+    "bridge_port": 5999
 }
 
 
@@ -942,11 +945,14 @@ def extract_video_id_from_url(url):
                 return ("tiktok", m.group(1))
         elif "youtube.com" in u or "youtu.be" in u:
             import re
-            # shorts, watch, embed, v=
             m = re.search(r'/(?:shorts|watch|embed)/([A-Za-z0-9_-]+)', url)
             if m:
                 return ("youtube", m.group(1))
             m = re.search(r'[?&]v=([A-Za-z0-9_-]+)', url)
+            if m:
+                return ("youtube", m.group(1))
+            # youtu.be/<id> 短链
+            m = re.search(r'youtu\.be/([A-Za-z0-9_-]+)', url)
             if m:
                 return ("youtube", m.group(1))
         elif "instagram.com" in u:
@@ -2334,19 +2340,10 @@ class DownloadThread(QThread):
                 cmd = self.build_ytdlp_args(url, job_dir, ua, cookie_args,
                                             player_client=None, referer=referer)
 
-                self.log("")
                 if net_attempt == 0:
-                    self.log("开始下载：")
+                    self.log(f"开始下载：{url}")
                 else:
-                    self.log(f"网络重试下载（第 {net_attempt} 次）：")
-                
-                # 调试：显示 URL 编码信息
-                import urllib.parse
-                parsed = urllib.parse.urlparse(url)
-                self.log(f"[DEBUG] URL: {url}")
-                self.log(f"[DEBUG] 用户名: {parsed.path.split('/')[1] if '/' in parsed.path else 'N/A'}")
-                self.log(f"[DEBUG] URL 长度: {len(url)}")
-                self.log(url)
+                    self.log(f"网络重试（第 {net_attempt} 次）：{url}")
 
                 ok, output_text = self._run_ytdlp(cmd)
 
@@ -2564,12 +2561,15 @@ class DownloadThread(QThread):
         返回 dict: {author, filename_base, post_id, video_url, duration, session} 或 None
         session 用于后续下载（自动携带页面响应 Cookie）
         """
+        task_debug("[NATIVE] START")
+        task_debug(f"[NATIVE] python={sys.executable}")
+
         post_id = self._tiktok_extract_post_id(url)
         if not post_id:
             canonical = self._tiktok_resolve_short_link(url)
             post_id = self._tiktok_extract_post_id(canonical)
             if not post_id:
-                task_debug("[NATIVE] Cannot extract post_id from URL")
+                task_debug("[NATIVE] FAILED reason=Cannot extract post_id from URL")
                 return None
 
         fetch_url = f"https://www.tiktok.com/@i/video/{post_id}"
@@ -2577,7 +2577,15 @@ class DownloadThread(QThread):
 
         try:
             from curl_cffi import requests as _cffi
+            task_debug("[NATIVE] curl_cffi=OK")
+        except ImportError as e:
+            task_debug(f"[NATIVE] FAILED reason=curl_cffi not installed")
+            task_debug(f"[NATIVE] EXCEPTION type=ImportError message={e}")
+            task_debug(f"[NATIVE] python={sys.executable}")
+            task_debug(f"[NATIVE] sys.path={sys.path[:3]}")
+            return None
 
+        try:
             headers = {
                 "Referer": "https://www.tiktok.com/",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -2599,29 +2607,33 @@ class DownloadThread(QThread):
                 timeout=30,
             )
 
+            task_debug(f"[NATIVE] HTTP={resp.status_code} html_len={len(resp.text)}")
+
             if resp.status_code != 200:
-                task_debug(f"[NATIVE] HTTP {resp.status_code}")
+                task_debug(f"[NATIVE] FAILED reason=HTTP_{resp.status_code}")
                 return None
 
             html = resp.text
 
             if not html:
-                task_debug("[NATIVE] empty response")
+                task_debug("[NATIVE] FAILED reason=empty response")
                 return None
 
             if self._tiktok_is_captcha_page(html):
-                task_debug("[NATIVE] captcha page detected")
+                task_debug("[NATIVE] FAILED reason=captcha page detected")
                 return None
 
             # 检测 WAF 挑战页面
             if "SlardarWAF" in html or "wafchallenge" in html:
-                task_debug("[NATIVE] WAF challenge page detected")
+                task_debug("[NATIVE] FAILED reason=WAF challenge page")
                 return None
 
             marker = '__UNIVERSAL_DATA_FOR_REHYDRATION__'
             if marker not in html:
-                task_debug(f"[NATIVE] {marker} not found")
+                task_debug(f"[NATIVE] universal_data=NOT_FOUND")
+                task_debug(f"[NATIVE] FAILED reason={marker} not found in HTML")
                 return None
+            task_debug(f"[NATIVE] universal_data=FOUND")
 
             try:
                 json_str = html.split(
@@ -2629,35 +2641,37 @@ class DownloadThread(QThread):
                 )[1].split('</script>')[0]
                 data = json.loads(json_str)
             except (IndexError, json.JSONDecodeError) as e:
-                task_debug(f"[NATIVE] JSON parse error: {e}")
+                task_debug(f"[NATIVE] FAILED reason=JSON parse error: {e}")
                 return None
 
             video_detail = data.get("__DEFAULT_SCOPE__", {}).get("webapp.video-detail")
             if not video_detail:
-                task_debug("[NATIVE] webapp.video-detail not found")
+                task_debug("[NATIVE] FAILED reason=webapp.video-detail not found")
                 return None
 
             status_msg = video_detail.get("statusMsg", "")
             if status_msg:
-                task_debug(f"[NATIVE] statusMsg: {status_msg}")
+                task_debug(f"[NATIVE] FAILED reason=statusMsg={status_msg}")
                 return None
 
             status_code = video_detail.get("statusCode")
             if status_code is not None and status_code != 0:
-                task_debug(f"[NATIVE] statusCode: {status_code}")
+                task_debug(f"[NATIVE] FAILED reason=statusCode={status_code}")
                 return None
 
             detail = video_detail.get("itemInfo", {}).get("itemStruct")
             if not detail:
-                task_debug("[NATIVE] itemStruct not found")
+                task_debug("[NATIVE] itemStruct=NOT_FOUND")
+                task_debug("[NATIVE] FAILED reason=itemStruct not found")
                 return None
+            task_debug("[NATIVE] itemStruct=FOUND")
 
             if detail.get("isContentClassified"):
-                task_debug("[NATIVE] age-restricted content")
+                task_debug("[NATIVE] FAILED reason=age-restricted content")
                 return None
 
             if not detail.get("author"):
-                task_debug("[NATIVE] no author info")
+                task_debug("[NATIVE] FAILED reason=no author info")
                 return None
 
             author = (detail.get("author", {}).get("uniqueId")
@@ -2699,12 +2713,13 @@ class DownloadThread(QThread):
                             break
 
             if not video_url:
-                task_debug("[NATIVE] no valid video URL found")
+                task_debug("[NATIVE] video_url=NOT_FOUND")
+                task_debug("[NATIVE] FAILED reason=no valid video URL in any fallback")
                 return None
 
             duration = vdata.get("duration")
-            task_debug(f"[NATIVE] OK author={author} post_id={post_id} "
-                       f"dur={duration} url_len={len(video_url)}")
+            task_debug(f"[NATIVE] video_url=FOUND url_len={len(video_url)}")
+            task_debug(f"[NATIVE] OK author={author} post_id={post_id} dur={duration}")
 
             return {
                 "author": author,
@@ -2714,19 +2729,23 @@ class DownloadThread(QThread):
                 "duration": duration,
                 "session": session,
             }
-        except ImportError:
-            task_debug("[NATIVE] curl_cffi not installed, native extract unavailable")
-            return None
         except Exception as e:
-            task_debug(f"[NATIVE] exception: {e}")
+            task_debug(f"[NATIVE] FAILED reason=exception")
+            task_debug(f"[NATIVE] EXCEPTION type={type(e).__name__} message={e}")
             return None
 
     def _tiktok_native_download(self, video_url, output_path, session=None):
         """原生 HTTP 直接下载 TikTok 视频（使用 session 携带页面响应 Cookie）"""
-        task_debug(f"[NATIVE_DL] url_len={len(video_url)} output={output_path} session={'yes' if session else 'no'}")
+        task_debug(f"[NATIVE_DL] START url_len={len(video_url)} output={output_path} session={'yes' if session else 'no'}")
         try:
             from curl_cffi import requests as _cffi
+            task_debug("[NATIVE_DL] curl_cffi=OK")
+        except ImportError as e:
+            task_debug(f"[NATIVE_DL] FAILED reason=curl_cffi not installed")
+            task_debug(f"[NATIVE_DL] EXCEPTION type=ImportError message={e}")
+            return False
 
+        try:
             headers = {
                 "Referer": "https://www.tiktok.com/",
                 "Accept": "*/*",
@@ -2751,23 +2770,28 @@ class DownloadThread(QThread):
                     stream=True,
                 )
 
+            task_debug(f"[NATIVE_DL] HTTP={resp.status_code}")
+
             if resp.status_code != 200:
-                task_debug(f"[NATIVE_DL] status={resp.status_code}")
+                task_debug(f"[NATIVE_DL] FAILED reason=HTTP_{resp.status_code}")
                 return False
 
             ct = resp.headers.get('Content-Type', '')
+            task_debug(f"[NATIVE_DL] content_type={ct}")
+
             if 'text/html' in ct or 'application/json' in ct:
-                task_debug(f"[NATIVE_DL] unexpected content-type: {ct}")
+                task_debug(f"[NATIVE_DL] FAILED reason=unexpected content-type={ct}")
                 return False
 
             total = int(resp.headers.get('Content-Length', 0))
-            task_debug(f"[NATIVE_DL] content-type={ct} size={total}")
+            task_debug(f"[NATIVE_DL] size={total}")
 
             output_path = Path(output_path)
             downloaded = 0
             with open(output_path, 'wb') as f:
                 for chunk in resp.iter_content(chunk_size=262144):
                     if self.stop_flag or self.skip_flag:
+                        task_debug(f"[NATIVE_DL] FAILED reason=user stopped/skipped")
                         return False
                     if chunk:
                         f.write(chunk)
@@ -2776,17 +2800,15 @@ class DownloadThread(QThread):
                             self.progress_signal.emit(min(int(downloaded * 100 / total), 99))
 
             if total > 0 and downloaded < total * 0.95:
-                task_debug(f"[NATIVE_DL] incomplete: {downloaded}/{total}")
+                task_debug(f"[NATIVE_DL] FAILED reason=incomplete {downloaded}/{total}")
                 return False
 
-            task_debug(f"[NATIVE_DL] complete: {downloaded} bytes")
+            task_debug(f"[NATIVE_DL] SUCCESS size={downloaded}")
             self.progress_signal.emit(100)
             return True
-        except ImportError:
-            task_debug("[NATIVE_DL] curl_cffi not installed")
-            return False
         except Exception as e:
-            task_debug(f"[NATIVE_DL] exception: {e}")
+            task_debug(f"[NATIVE_DL] FAILED reason=exception")
+            task_debug(f"[NATIVE_DL] EXCEPTION type={type(e).__name__} message={e}")
             return False
 
     def _download_tiktok(self, url, job_dir):
@@ -2808,6 +2830,7 @@ class DownloadThread(QThread):
         # 成功则跳过 yt-dlp，失败则无条件落入下方现有 yt-dlp 流程
         native_used = False
         task_debug(f"[NATIVE] task_id={task_id} attempting native extract")
+        task_debug(f"[NATIVE] python={sys.executable}")
         native_info = self._tiktok_native_extract(url)
         if native_info:
             video_url = native_info["video_url"]
@@ -2828,6 +2851,7 @@ class DownloadThread(QThread):
                 return True
             else:
                 task_debug(f"[NATIVE] task_id={task_id} native download FAILED, falling back to yt-dlp")
+                task_debug("[FALLBACK] YTDLP")
                 self.log(f"[TikTok Native] 直接下载失败，回退 yt-dlp...")
                 try:
                     if output_path.exists():
@@ -2836,6 +2860,7 @@ class DownloadThread(QThread):
                     pass
         else:
             task_debug(f"[NATIVE] task_id={task_id} native extract FAILED, falling back to yt-dlp")
+            task_debug("[FALLBACK] YTDLP")
             self.log(f"[TikTok Native] 页面解析失败，使用 yt-dlp...")
 
         # ---- 现有 yt-dlp 流程（fallback）----
@@ -2928,14 +2953,12 @@ class DownloadThread(QThread):
                 ])
                 task_debug(f"[COMMAND] task_id={task_id} {task_redact_command(cmd)}")
 
-                self.log("")
                 if attempt == 1:
-                    self.log("开始下载：")
+                    self.log(f"开始下载：{url}")
                 elif last_stage == "RESOLVE":
-                    self.log(f"TikTok RESOLVE Recovery（第 {resolve_recoveries}/3 次，已刷新 Cookie/UA/Referer 并重建请求）：")
+                    self.log(f"TikTok RESOLVE 恢复（第 {resolve_recoveries} 次）：{url}")
                 else:
-                    self.log(f"TikTok DOWNLOAD 重试（-N {workers}）：")
-                self.log(url)
+                    self.log(f"TikTok 重试（-N {workers}）：{url}")
 
                 task_debug(f"[RESOLVE] task_id={task_id} attempt={attempt} status=START")
                 ok, output_text = self._run_ytdlp(cmd)
@@ -3897,22 +3920,12 @@ class DownloadThread(QThread):
 
         try:
 
-            self.log("")
-
-            self.log(
-                "=" * 60
-            )
-
             self.log(
                 f"[下载] "
-                f"{index} / {total}"
+                f"{index} / {total}  "
+                f"{platform}  "
+                f"{url}"
             )
-
-            self.log(
-                f"[下载] 平台：{platform}"
-            )
-
-            self.log(url)
 
             ok = self.download_source(
                 url,
@@ -3964,16 +3977,12 @@ class DownloadThread(QThread):
                 f"video_{video_id}.mp4"
             )
 
-            number = 1
-
-            while final_file.exists():
-
-                final_file = (
-                    platform_dir /
-                    f"video_{video_id}_{number}.mp4"
+            # 兜底检查：如果视频文件已存在，直接跳过（防止指纹失效时产生重复文件）
+            if final_file.exists():
+                self.log(
+                    f"[去重] 视频已存在，跳过：{final_file.name}"
                 )
-
-                number += 1
+                return True
 
             ok = self.convert_video(
                 source_file,
@@ -4139,12 +4148,12 @@ class DownloadThread(QThread):
                     # 发送单个 URL 完成信号
                     self.url_finished_signal.emit(url, ok)
 
-                    if ok:
-
+                    # 手动停止或跳过：不计入成败
+                    if self.stop_flag or self.skip_flag:
+                        pass
+                    elif ok:
                         self.success += 1
-
                     else:
-
                         self.failed += 1
 
                 progress = int(
@@ -4439,7 +4448,7 @@ class LinkListWidget(QListWidget):
         failed = []
         for item in self.selectedItems():
             fg = item.foreground()
-            if fg and fg.color() and fg.color().name().lower() == "#ff6b6b":
+            if fg and fg.color() and fg.color().name().lower() == "#f38ba8":
                 failed.append(item.text().strip())
         return failed
 
@@ -4679,6 +4688,11 @@ class MainWindow(QMainWindow):
         self.current_download_url = ""
         self._stopped_by_user = False
         self._auto_mode = False
+
+        # 自动下载暂停状态（从配置读取，控制队列调度，不影响当前任务）
+        self.auto_download_paused = bool(
+            self.config.get("auto_download_paused", False)
+        )
 
         # 内存指纹库（基于输出目录 MP4 文件扫描）
         self.fingerprint_set = set()
@@ -5261,6 +5275,23 @@ class MainWindow(QMainWindow):
             self.btn_stop
         )
 
+        # 暂停自动下载复选框（只控制队列调度，不中断当前任务）
+        self.chk_auto_pause = QCheckBox(
+            "暂停自动下载"
+        )
+
+        self.chk_auto_pause.setChecked(
+            self.auto_download_paused
+        )
+
+        self.chk_auto_pause.toggled.connect(
+            self.on_auto_pause_changed
+        )
+
+        control_layout.addWidget(
+            self.chk_auto_pause
+        )
+
         control_layout.addStretch()
 
         main_layout.addLayout(
@@ -5387,157 +5418,176 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(
             """
             QMainWindow {
-                background: #2b2b2b;
+                background: #1e1e2e;
             }
 
             QWidget {
-                color: #dedede;
+                color: #cdd6f4;
                 font-family: "Microsoft YaHei";
                 font-size: 13px;
             }
 
             QLabel#title {
-                color: #f1f1f1;
+                color: #cba6f7;
                 font-size: 18px;
                 font-weight: bold;
             }
 
             QLabel#status {
-                color: #9a9a9a;
+                color: #a6adc8;
                 padding-right: 4px;
             }
 
             QLabel#smallLabel {
-                color: #aaaaaa;
+                color: #a6adc8;
             }
 
             QLabel#sectionTitle {
-                color: #eeeeee;
+                color: #cdd6f4;
                 font-size: 13px;
                 font-weight: bold;
             }
 
             QLabel#countLabel {
-                color: #888888;
+                color: #7f849c;
                 margin-left: 8px;
             }
 
             QLabel#hint {
-                color: #777777;
+                color: #6c7086;
                 font-size: 11px;
             }
 
             QFrame#settingFrame,
             QFrame#linkFrame {
-                background: #323232;
-                border: 1px solid #424242;
-                border-radius: 6px;
+                background: #313244;
+                border: 1px solid #45475a;
+                border-radius: 8px;
             }
 
             QLineEdit,
             QComboBox {
-                background: #242424;
-                border: 1px solid #4a4a4a;
-                border-radius: 4px;
-                color: #dddddd;
-                padding: 5px 8px;
+                background: #1e1e2e;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                color: #cdd6f4;
+                padding: 5px 10px;
                 min-height: 27px;
             }
 
             QLineEdit:focus,
             QComboBox:focus {
-                border: 1px solid #666666;
+                border: 1px solid #89b4fa;
             }
 
             QComboBox QAbstractItemView {
-                background: #303030;
-                color: #eeeeee;
-                selection-background-color: #505050;
-                border: 1px solid #555555;
+                background: #313244;
+                color: #cdd6f4;
+                selection-background-color: #45475a;
+                border: 1px solid #585b70;
             }
 
             QPushButton {
-                background: #414141;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                color: #dddddd;
-                padding: 6px 12px;
+                background: #45475a;
+                border: 1px solid #585b70;
+                border-radius: 6px;
+                color: #cdd6f4;
+                padding: 6px 14px;
                 min-height: 28px;
             }
 
             QPushButton:hover {
-                background: #4b4b4b;
+                background: #585b70;
+                border: 1px solid #6c7086;
             }
 
             QPushButton:pressed {
-                background: #353535;
+                background: #313244;
             }
 
             QPushButton:disabled {
-                background: #303030;
-                color: #666666;
-                border-color: #3a3a3a;
+                background: #313244;
+                color: #6c7086;
+                border-color: #45475a;
             }
 
             QPushButton#primaryButton {
-                background: #555555;
-                border: 1px solid #707070;
-                color: #ffffff;
+                background: #89b4fa;
+                border: 1px solid #b4befe;
+                color: #1e1e2e;
                 font-weight: bold;
-                padding-left: 20px;
-                padding-right: 20px;
+                padding-left: 22px;
+                padding-right: 22px;
             }
 
             QPushButton#primaryButton:hover {
-                background: #626262;
+                background: #b4befe;
+            }
+
+            QPushButton#primaryButton:pressed {
+                background: #74c7ec;
+            }
+
+            QPushButton#primaryButton:disabled {
+                background: #45475a;
+                color: #6c7086;
+                border-color: #45475a;
             }
 
             QListWidget#linkList {
-                background: #242424;
-                border: 1px solid #444444;
-                border-radius: 4px;
-                color: #dddddd;
+                background: #1e1e2e;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                color: #cdd6f4;
                 padding: 4px;
+                outline: none;
             }
 
             QListWidget#linkList::item {
-                padding: 5px;
-                border-radius: 3px;
+                padding: 6px 8px;
+                border-radius: 4px;
+                margin: 1px 2px;
             }
 
             QListWidget#linkList::item:selected {
-                background: #505050;
-                color: #ffffff;
+                background: #45475a;
+                color: #cba6f7;
+            }
+
+            QListWidget#linkList::item:hover {
+                background: #313244;
             }
 
             QTextEdit#logEdit {
-                background: #202020;
-                border: 1px solid #414141;
-                border-radius: 4px;
-                color: #bcbcbc;
-                padding: 7px;
+                background: #181825;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                color: #a6adc8;
+                padding: 8px;
                 font-family: Consolas, "Microsoft YaHei";
                 font-size: 12px;
             }
 
             QProgressBar {
-                background: #202020;
-                border: 1px solid #414141;
-                border-radius: 4px;
+                background: #1e1e2e;
+                border: 1px solid #45475a;
+                border-radius: 6px;
                 text-align: center;
-                color: #dddddd;
-                height: 20px;
+                color: #cdd6f4;
+                height: 22px;
             }
 
             QProgressBar::chunk {
-                background: #666666;
-                border-radius: 3px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #89b4fa, stop:1 #cba6f7);
+                border-radius: 5px;
             }
 
             QMenu {
-                background: #303030;
-                color: #dddddd;
-                border: 1px solid #555555;
+                background: #313244;
+                color: #cdd6f4;
+                border: 1px solid #585b70;
+                border-radius: 4px;
             }
 
             QMenu::item {
@@ -5545,22 +5595,34 @@ class MainWindow(QMainWindow):
             }
 
             QMenu::item:selected {
-                background: #4b4b4b;
+                background: #45475a;
+                color: #89b4fa;
             }
 
             QScrollBar:vertical {
-                background: #252525;
-                width: 10px;
+                background: #1e1e2e;
+                width: 8px;
+                border-radius: 4px;
             }
 
             QScrollBar::handle:vertical {
-                background: #555555;
-                border-radius: 5px;
+                background: #585b70;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+
+            QScrollBar::handle:vertical:hover {
+                background: #6c7086;
             }
 
             QScrollBar::add-line:vertical,
             QScrollBar::sub-line:vertical {
                 height: 0px;
+            }
+
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {
+                background: none;
             }
             """
         )
@@ -5724,6 +5786,10 @@ class MainWindow(QMainWindow):
                 self._get_non_failed_urls()
             )
 
+            data["auto_download_paused"] = bool(
+                getattr(self, "auto_download_paused", False)
+            )
+
             data["window"] = {
                 "x": self.x(),
                 "y": self.y(),
@@ -5826,7 +5892,10 @@ class MainWindow(QMainWindow):
                 
                 self.link_list.addItem(url)
                 self.link_list.urls_changed.emit()
-                self._qlog(f"[自动下载] 已添加链接：{url}")
+                if getattr(self, 'auto_download_paused', False):
+                    self._qlog(f"[自动下载] 已暂停，新任务加入队列等待：{url}")
+                else:
+                    self._qlog(f"[自动下载] 已添加链接：{url}")
                 QTimer.singleShot(500, self.auto_start_download)
             else:
                 print("[自动下载] link_list 尚未初始化", flush=True)
@@ -5842,9 +5911,34 @@ class MainWindow(QMainWindow):
         """桥接收到 UA（主线程）"""
         self.on_bridge_ua_received(ua)
 
+    def on_auto_pause_changed(self, checked):
+        """勾选/取消「暂停自动下载」：只控制队列调度，不触碰当前任务"""
+        self.auto_download_paused = bool(checked)
+        # 立即保存配置（不影响其他字段，直接写当前状态）
+        try:
+            self.config.data["auto_download_paused"] = bool(checked)
+            self.config.save()
+        except Exception as e:
+            print(f"[自动下载] 保存暂停状态失败：{e}", flush=True)
+
+        if checked:
+            self._qlog("[自动下载] 已暂停，队列等待中")
+            # 仅在没有任务运行时更新状态标签，避免覆盖“下载中”
+            if not (self.download_thread and self.download_thread.isRunning()):
+                self.lbl_status.setText("自动队列已暂停")
+        else:
+            self._qlog("[自动下载] 已恢复，继续处理队列")
+            # 立即从现有列表中寻找待下载任务并恢复执行（不干扰正在运行的线程）
+            QTimer.singleShot(200, self.auto_start_download)
+
     def auto_start_download(self):
         """自动触发下载(静默模式,不弹对话框)"""
         try:
+            # 暂停自动下载：不启动新任务，列表任务保留，队列等待（不影响正在运行的任务）
+            if getattr(self, 'auto_download_paused', False):
+                print("[自动下载] 已暂停，队列等待中", flush=True)
+                return
+
             # 如果下载线程正在运行,不重复触发(下载完成后会自动检查队列)
             if (
                 self.download_thread
@@ -6410,7 +6504,19 @@ class MainWindow(QMainWindow):
             urls = (
                 self.link_list.get_urls()
             )
-        
+
+        # 指纹去重：过滤掉本地已存在的视频（无论手动还是自动模式）
+        original_count = len(urls)
+        duplicate_urls = [u for u in urls if self._check_fingerprint(u)]
+        urls = [u for u in urls if not self._check_fingerprint(u)]
+        skipped = original_count - len(urls)
+        if skipped > 0:
+            # 从列表中移除已存在的重复链接
+            for dup_url in duplicate_urls:
+                self.link_list.remove_url(dup_url)
+                self._qlog(f"[去重] 本地已有，移除：{dup_url}")
+            self._stat_skipped += skipped
+
         # 调试：打印接收到的 URL
         if urls:
             print(f"[DEBUG] start_download 收到 {len(urls)} 个 URL:", flush=True)
@@ -6521,8 +6627,15 @@ class MainWindow(QMainWindow):
 
         # 初始化/更新任务统计
         if not auto:
-            # 手动下载：重置所有统计
-            self._update_task_stats(total=len(urls), new=0, skipped=0, failed=0)
+            # 手动下载：重置统计（保留指纹去重已跳过的计数）
+            self._stat_total = len(urls)
+            self._stat_new = 0
+            self._stat_failed = 0
+            # _stat_skipped 已在上面指纹去重时累加，不重置
+            self._update_task_stats(
+                self._stat_total, self._stat_new,
+                self._stat_skipped, self._stat_failed
+            )
         else:
             # 自动下载：累加总数（保留之前的统计）
             self._stat_total += len(urls)
@@ -6628,11 +6741,6 @@ class MainWindow(QMainWindow):
     def on_url_download_finished(self, url, success):
         """单个 URL 完成：成功→移出列表+记录；失败→标红且不自动重试"""
         try:
-            # 调试：打印接收到的 URL 和 Cookie 状态
-            all_cookie_file = COOKIES_DIR / "_all_cookies.txt"
-            cookie_size = all_cookie_file.stat().st_size if all_cookie_file.exists() else 0
-            print(f"[DEBUG] on_url_download_finished 收到 URL: 长度={len(url)}, Cookie大小={cookie_size}KB, 结果={'成功' if success else '失败'}", flush=True)
-            
             if self.current_download_url == url:
                 self.current_download_url = ""
 
@@ -6668,7 +6776,7 @@ class MainWindow(QMainWindow):
             for i in range(self.link_list.count()):
                 item = self.link_list.item(i)
                 if item and item.text().strip() == url:
-                    item.setForeground(QColor("#ff6b6b"))
+                    item.setForeground(QColor("#f38ba8"))
                     break
         except Exception:
             pass
@@ -6681,7 +6789,7 @@ class MainWindow(QMainWindow):
                 item = self.link_list.item(i)
                 if item:
                     fg = item.foreground()
-                    if fg and fg.color() and fg.color().name().lower() == "#ff6b6b":
+                    if fg and fg.color() and fg.color().name().lower() == "#f38ba8":
                         failed_urls.append(item.text().strip())
                         self.link_list.takeItem(i)
             if failed_urls:
@@ -6738,6 +6846,8 @@ class MainWindow(QMainWindow):
                 stem = mp4_file.stem
                 if stem.startswith("video_") and len(stem) > 6:
                     vid = stem[6:]
+                    # 去掉 _1, _2 等数字后缀（重复下载产生的副本文件）
+                    vid = re.sub(r'_\d+$', '', vid)
                     # 从父目录名推断平台
                     parent_name = mp4_file.parent.name.lower()
                     if parent_name in self._KNOWN_PLATFORMS:
@@ -6768,10 +6878,17 @@ class MainWindow(QMainWindow):
     def _build_fingerprint_set(self):
         """构建内存指纹库并更新统计标签"""
         self.fingerprint_set, total, valid, no_fp_list = self._scan_fingerprints()
+        # 从 video_dna.txt 加载历史指纹（合并）
+        dna_fps = self._load_dna_file()
+        added = len(dna_fps - self.fingerprint_set)
+        self.fingerprint_set |= dna_fps
         self._no_fingerprint_files = no_fp_list
         self._total_mp4_count = total
-        self._valid_fingerprint_count = valid
+        self._valid_fingerprint_count = len(self.fingerprint_set)
         self._update_stats_labels()
+
+        if added > 0:
+            print(f"[DNA] 从 video_dna.txt 加载了 {added} 条历史指纹", flush=True)
 
         if no_fp_list:
             for fname in no_fp_list[:10]:
@@ -6789,15 +6906,45 @@ class MainWindow(QMainWindow):
         return False
 
     def _add_fingerprint(self, url):
-        """下载成功后将指纹加入内存库"""
+        """下载成功后将指纹加入内存库 + 持久化到 video_dna.txt"""
         info = extract_video_id_from_url(url)
         if info:
             platform, vid = info
             fp = f"{platform}_{vid}"
+            is_new = fp not in self.fingerprint_set
             self.fingerprint_set.add(fp)
             self._valid_fingerprint_count = len(self.fingerprint_set)
             self._total_mp4_count += 1
             self._update_stats_labels()
+            if is_new:
+                self._save_dna_file(fp)
+
+    def _load_dna_file(self):
+        """从 video_dna.txt 加载历史指纹"""
+        fps = set()
+        try:
+            if VIDEO_DNA_FILE.exists():
+                for line in VIDEO_DNA_FILE.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    # 新格式：platform_vid（如 tiktok_123456）
+                    if "_" in line and not line.startswith("_"):
+                        fps.add(line)
+                    else:
+                        # 旧格式：纯数字 ID，默认归为 tiktok
+                        fps.add(f"tiktok_{line}")
+        except Exception as e:
+            print(f"[DNA] 加载 video_dna.txt 失败：{e}", flush=True)
+        return fps
+
+    def _save_dna_file(self, fp):
+        """将单条指纹追加写入 video_dna.txt"""
+        try:
+            with open(VIDEO_DNA_FILE, "a", encoding="utf-8") as f:
+                f.write(fp + "\n")
+        except Exception as e:
+            print(f"[DNA] 写入 video_dna.txt 失败：{e}", flush=True)
 
     def _do_scan(self):
         """用户点击[扫描]按钮：重新扫描输出目录并重建指纹库"""
@@ -6849,7 +6996,7 @@ class MainWindow(QMainWindow):
                 item = self.link_list.item(i)
                 if item:
                     fg = item.foreground()
-                    is_red = fg and fg.color() and fg.color().name().lower() == "#ff6b6b"
+                    is_red = fg and fg.color() and fg.color().name().lower() == "#f38ba8"
                     if not is_red:
                         url = item.text().strip()
                         if url:
@@ -6961,8 +7108,12 @@ class MainWindow(QMainWindow):
 
         # 手动停止：不自动继续
         if self._stopped_by_user:
+            self.lbl_status.setText("已停止")
+            self.log("已手动停止任务")
             self._qlog("[队列] 任务已手动停止")
             return
+
+        self.lbl_status.setText("任务完成")
 
         # 自动下载队列:检查是否还有未尝试的链接
         remaining_urls = [
@@ -6970,6 +7121,11 @@ class MainWindow(QMainWindow):
             if u not in self.tried_urls
         ]
         if remaining_urls:
+            # 自动队列已暂停：当前任务正常完成后不启动下一个，任务保留在列表
+            if getattr(self, 'auto_download_paused', False):
+                self._qlog("[自动下载] 当前任务完成，自动队列已暂停")
+                self.lbl_status.setText("自动队列已暂停")
+                return
             # 还有链接,继续下载
             self.log("")
             self._qlog(f"[自动下载] 列表中还有 {len(remaining_urls)} 个链接,继续下载...")
@@ -7018,47 +7174,47 @@ def apply_application_style(
 
     palette.setColor(
         QPalette.Window,
-        QColor("#2b2b2b")
+        QColor("#1e1e2e")
     )
 
     palette.setColor(
         QPalette.WindowText,
-        QColor("#dddddd")
+        QColor("#cdd6f4")
     )
 
     palette.setColor(
         QPalette.Base,
-        QColor("#202020")
+        QColor("#181825")
     )
 
     palette.setColor(
         QPalette.AlternateBase,
-        QColor("#303030")
+        QColor("#313244")
     )
 
     palette.setColor(
         QPalette.Text,
-        QColor("#dddddd")
+        QColor("#cdd6f4")
     )
 
     palette.setColor(
         QPalette.Button,
-        QColor("#414141")
+        QColor("#45475a")
     )
 
     palette.setColor(
         QPalette.ButtonText,
-        QColor("#dddddd")
+        QColor("#cdd6f4")
     )
 
     palette.setColor(
         QPalette.Highlight,
-        QColor("#555555")
+        QColor("#89b4fa")
     )
 
     palette.setColor(
         QPalette.HighlightedText,
-        QColor("#ffffff")
+        QColor("#1e1e2e")
     )
 
     app.setPalette(
