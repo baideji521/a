@@ -3419,3 +3419,3385 @@ fragment_retries=5
 
 [COMMAND] task_id=197696 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_6_1787376985\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7493276584162364702
 [RESOLVE] task_id=197696 attempt=1 status=START
+[CHALLENGE] task_id=197696 attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=197696 attempt=1 status=SUCCESS
+[DOWNLOAD] task_id=197696 attempt=1 status=SUCCESS
+[YTDLP RESULT] task_id=197696 attempt=1 resolve=SUCCESS download=SUCCESS error_class=NA
+============================================================
+[TIKTOK TASK END]
+task_id=197696
+result=SUCCESS
+attempts=1
+elapsed=23.5s
+final_error_class=NA
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=197696
+result=SUCCESS
+attempts=1
+elapsed=23.5s
+final_error_class=NA
+============================================================
+
+============================================================
+[TASK START]
+task_id=EAFC41
+platform=tiktok
+url=https://www.tiktok.com/@mark.ohh7/video/7505449461598981418
+start_time=2026-08-22 13:37:03
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=EAFC41
+url=https://www.tiktok.com/@mark.ohh7/video/7505449461598981418
+time=2026-08-22 13:37:07
+============================================================
+
+[REQUEST]
+task_id=EAFC41
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:37:07
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=EAFC41
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=EAFC41
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_EAFC41.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:37:05
+refreshed=true
+
+[UA]
+task_id=EAFC41
+source=extension
+length=111
+
+[REFERER]
+task_id=EAFC41
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=EAFC41
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=EAFC41
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=EAFC41
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=EAFC41 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_7_1787377023\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@mark.ohh7/video/7505449461598981418
+[RESOLVE] task_id=EAFC41 attempt=1 status=START
+[CHALLENGE] task_id=EAFC41 attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=EAFC41 attempt=1 status=FAILED
+[YTDLP RESULT] task_id=EAFC41 attempt=1 resolve=FAILED download=NA error_class=EXTRACTOR
+[ERROR]
+task_id=EAFC41
+attempt=1
+class=EXTRACTOR
+stage=RESOLVE
+message=ERROR: [TikTok] 7505449461598981418: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=INITIAL_READ
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@mark.ohh7/video/7505449461598981418
+[TikTok] 7505449461598981418: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7505449461598981418: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7505449461598981418: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[REQUEST]
+task_id=EAFC41
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:37:19
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7505449461598981418: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=EAFC41
+attempt=2
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=EAFC41
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_EAFC41.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:37:05
+refreshed=true
+
+[UA]
+task_id=EAFC41
+source=extension
+length=111
+
+[REFERER]
+task_id=EAFC41
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=EAFC41
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=EAFC41
+attempt=2
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=EAFC41
+attempt=2
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=EAFC41 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_7_1787377023\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@mark.ohh7/video/7505449461598981418
+[RESOLVE] task_id=EAFC41 attempt=2 status=START
+[CHALLENGE] task_id=EAFC41 attempt=2 challenge_solver=native_python
+[RESOLVE] task_id=EAFC41 attempt=2 status=FAILED
+[YTDLP RESULT] task_id=EAFC41 attempt=2 resolve=FAILED download=NA error_class=EXTRACTOR
+[ERROR]
+task_id=EAFC41
+attempt=2
+class=EXTRACTOR
+stage=RESOLVE
+message=ERROR: [TikTok] 7505449461598981418: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@mark.ohh7/video/7505449461598981418
+[TikTok] 7505449461598981418: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7505449461598981418: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7505449461598981418: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[REQUEST]
+task_id=EAFC41
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:37:36
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7505449461598981418: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=EAFC41
+attempt=3
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=EAFC41
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_EAFC41.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:37:05
+refreshed=true
+
+[UA]
+task_id=EAFC41
+source=extension
+length=111
+
+[REFERER]
+task_id=EAFC41
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=EAFC41
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=EAFC41
+attempt=3
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=EAFC41
+attempt=3
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=EAFC41 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_7_1787377023\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@mark.ohh7/video/7505449461598981418
+[RESOLVE] task_id=EAFC41 attempt=3 status=START
+[CHALLENGE] task_id=EAFC41 attempt=3 challenge_solver=native_python
+[RESOLVE] task_id=EAFC41 attempt=3 status=FAILED
+[YTDLP RESULT] task_id=EAFC41 attempt=3 resolve=FAILED download=NA error_class=EXTRACTOR
+[ERROR]
+task_id=EAFC41
+attempt=3
+class=EXTRACTOR
+stage=RESOLVE
+message=ERROR: [TikTok] 7505449461598981418: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@mark.ohh7/video/7505449461598981418
+[TikTok] 7505449461598981418: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7505449461598981418: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7505449461598981418: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[REQUEST]
+task_id=EAFC41
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:37:58
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7505449461598981418: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=EAFC41
+attempt=4
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=EAFC41
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_EAFC41.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:37:37
+refreshed=true
+
+[UA]
+task_id=EAFC41
+source=extension
+length=111
+
+[REFERER]
+task_id=EAFC41
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=EAFC41
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=EAFC41
+attempt=4
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=EAFC41
+attempt=4
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=EAFC41 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_7_1787377023\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@mark.ohh7/video/7505449461598981418
+[RESOLVE] task_id=EAFC41 attempt=4 status=START
+[CHALLENGE] task_id=EAFC41 attempt=4 challenge_solver=native_python
+[RESOLVE] task_id=EAFC41 attempt=4 status=SUCCESS
+[DOWNLOAD] task_id=EAFC41 attempt=4 status=SUCCESS
+[YTDLP RESULT] task_id=EAFC41 attempt=4 resolve=SUCCESS download=SUCCESS error_class=NA
+============================================================
+[TIKTOK TASK END]
+task_id=EAFC41
+result=SUCCESS
+attempts=4
+elapsed=89.5s
+final_error_class=EXTRACTOR
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=EAFC41
+result=SUCCESS
+attempts=4
+elapsed=89.5s
+final_error_class=EXTRACTOR
+============================================================
+
+============================================================
+[TASK START]
+task_id=1D873F
+platform=tiktok
+url=https://www.tiktok.com/@jackjerry/video/7600887507210849566
+start_time=2026-08-22 13:38:56
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=1D873F
+url=https://www.tiktok.com/@jackjerry/video/7600887507210849566
+time=2026-08-22 13:39:01
+============================================================
+
+[REQUEST]
+task_id=1D873F
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:39:01
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=1D873F
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=1D873F
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_1D873F.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:38:37
+refreshed=true
+
+[UA]
+task_id=1D873F
+source=extension
+length=111
+
+[REFERER]
+task_id=1D873F
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=1D873F
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=1D873F
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=1D873F
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=1D873F C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_8_1787377136\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7600887507210849566
+[RESOLVE] task_id=1D873F attempt=1 status=START
+[CHALLENGE] task_id=1D873F attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=1D873F attempt=1 status=SUCCESS
+[DOWNLOAD] task_id=1D873F attempt=1 status=SUCCESS
+[YTDLP RESULT] task_id=1D873F attempt=1 resolve=SUCCESS download=SUCCESS error_class=NA
+============================================================
+[TIKTOK TASK END]
+task_id=1D873F
+result=SUCCESS
+attempts=1
+elapsed=27.0s
+final_error_class=NA
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=1D873F
+result=SUCCESS
+attempts=1
+elapsed=27.0s
+final_error_class=NA
+============================================================
+
+============================================================
+[TASK START]
+task_id=2F34B0
+platform=tiktok
+url=https://www.tiktok.com/@gerrylynch79/video/7555663509661469969
+start_time=2026-08-22 13:39:42
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=2F34B0
+url=https://www.tiktok.com/@gerrylynch79/video/7555663509661469969
+time=2026-08-22 13:39:46
+============================================================
+
+[REQUEST]
+task_id=2F34B0
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:39:46
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=2F34B0
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=2F34B0
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_2F34B0.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:39:37
+refreshed=true
+
+[UA]
+task_id=2F34B0
+source=extension
+length=111
+
+[REFERER]
+task_id=2F34B0
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=2F34B0
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=2F34B0
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=2F34B0
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=2F34B0 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_9_1787377182\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@gerrylynch79/video/7555663509661469969
+[RESOLVE] task_id=2F34B0 attempt=1 status=START
+[CHALLENGE] task_id=2F34B0 attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=2F34B0 attempt=1 status=SUCCESS
+[DOWNLOAD] task_id=2F34B0 attempt=1 status=SUCCESS
+[YTDLP RESULT] task_id=2F34B0 attempt=1 resolve=SUCCESS download=SUCCESS error_class=NA
+============================================================
+[TIKTOK TASK END]
+task_id=2F34B0
+result=SUCCESS
+attempts=1
+elapsed=20.1s
+final_error_class=NA
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=2F34B0
+result=SUCCESS
+attempts=1
+elapsed=20.2s
+final_error_class=NA
+============================================================
+
+============================================================
+[TASK START]
+task_id=60DC61
+platform=tiktok
+url=https://www.tiktok.com/@lemon87862/video/7582500667978157326
+start_time=2026-08-22 13:40:14
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=60DC61
+url=https://www.tiktok.com/@lemon87862/video/7582500667978157326
+time=2026-08-22 13:40:17
+============================================================
+
+[REQUEST]
+task_id=60DC61
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:40:17
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=60DC61
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=60DC61
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_60DC61.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:39:37
+refreshed=true
+
+[UA]
+task_id=60DC61
+source=extension
+length=111
+
+[REFERER]
+task_id=60DC61
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=60DC61
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=60DC61
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=60DC61
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=60DC61 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_10_1787377214\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@lemon87862/video/7582500667978157326
+[RESOLVE] task_id=60DC61 attempt=1 status=START
+[CHALLENGE] task_id=60DC61 attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=60DC61 attempt=1 status=FAILED
+[YTDLP RESULT] task_id=60DC61 attempt=1 resolve=FAILED download=NA error_class=EXTRACTOR
+[ERROR]
+task_id=60DC61
+attempt=1
+class=EXTRACTOR
+stage=RESOLVE
+message=ERROR: [TikTok] 7582500667978157326: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=INITIAL_READ
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@lemon87862/video/7582500667978157326
+[TikTok] 7582500667978157326: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7582500667978157326: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7582500667978157326: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[REQUEST]
+task_id=60DC61
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:40:31
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7582500667978157326: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=60DC61
+attempt=2
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=60DC61
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_60DC61.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:39:37
+refreshed=true
+
+[UA]
+task_id=60DC61
+source=extension
+length=111
+
+[REFERER]
+task_id=60DC61
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=60DC61
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=60DC61
+attempt=2
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=60DC61
+attempt=2
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=60DC61 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_10_1787377214\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@lemon87862/video/7582500667978157326
+[RESOLVE] task_id=60DC61 attempt=2 status=START
+[CHALLENGE] task_id=60DC61 attempt=2 challenge_solver=native_python
+[RESOLVE] task_id=60DC61 attempt=2 status=FAILED
+[YTDLP RESULT] task_id=60DC61 attempt=2 resolve=FAILED download=NA error_class=EXTRACTOR
+[ERROR]
+task_id=60DC61
+attempt=2
+class=EXTRACTOR
+stage=RESOLVE
+message=ERROR: [TikTok] 7582500667978157326: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@lemon87862/video/7582500667978157326
+[TikTok] 7582500667978157326: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7582500667978157326: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7582500667978157326: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[REQUEST]
+task_id=60DC61
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:40:47
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7582500667978157326: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=60DC61
+attempt=3
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=60DC61
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_60DC61.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:40:37
+refreshed=true
+
+[UA]
+task_id=60DC61
+source=extension
+length=111
+
+[REFERER]
+task_id=60DC61
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=60DC61
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=60DC61
+attempt=3
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=60DC61
+attempt=3
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=60DC61 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_10_1787377214\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@lemon87862/video/7582500667978157326
+[RESOLVE] task_id=60DC61 attempt=3 status=START
+[CHALLENGE] task_id=60DC61 attempt=3 challenge_solver=native_python
+[RESOLVE] task_id=60DC61 attempt=3 status=SUCCESS
+[DOWNLOAD] task_id=60DC61 attempt=3 status=SUCCESS
+[YTDLP RESULT] task_id=60DC61 attempt=3 resolve=SUCCESS download=SUCCESS error_class=NA
+============================================================
+[TIKTOK TASK END]
+task_id=60DC61
+result=SUCCESS
+attempts=3
+elapsed=51.0s
+final_error_class=EXTRACTOR
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=60DC61
+result=SUCCESS
+attempts=3
+elapsed=51.1s
+final_error_class=EXTRACTOR
+============================================================
+
+============================================================
+[TASK START]
+task_id=81886A
+platform=tiktok
+url=https://www.tiktok.com/@dasha.eg0o/video/7511751966347775254
+start_time=2026-08-22 13:41:23
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=81886A
+url=https://www.tiktok.com/@dasha.eg0o/video/7511751966347775254
+time=2026-08-22 13:41:27
+============================================================
+
+[REQUEST]
+task_id=81886A
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:41:27
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=81886A
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=81886A
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_81886A.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:41:05
+refreshed=true
+
+[UA]
+task_id=81886A
+source=extension
+length=111
+
+[REFERER]
+task_id=81886A
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=81886A
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=81886A
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=81886A
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=81886A C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_11_1787377283\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@dasha.eg0o/video/7511751966347775254
+[RESOLVE] task_id=81886A attempt=1 status=START
+[CHALLENGE] task_id=81886A attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=81886A attempt=1 status=FAILED
+[YTDLP RESULT] task_id=81886A attempt=1 resolve=FAILED download=NA error_class=EXTRACTOR
+[ERROR]
+task_id=81886A
+attempt=1
+class=EXTRACTOR
+stage=RESOLVE
+message=ERROR: [TikTok] 7511751966347775254: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=INITIAL_READ
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@dasha.eg0o/video/7511751966347775254
+[TikTok] 7511751966347775254: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7511751966347775254: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7511751966347775254: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[REQUEST]
+task_id=81886A
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:41:39
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7511751966347775254: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=81886A
+attempt=2
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=81886A
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_81886A.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:41:37
+refreshed=true
+
+[UA]
+task_id=81886A
+source=extension
+length=111
+
+[REFERER]
+task_id=81886A
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=81886A
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=81886A
+attempt=2
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=81886A
+attempt=2
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=81886A C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_11_1787377283\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@dasha.eg0o/video/7511751966347775254
+[RESOLVE] task_id=81886A attempt=2 status=START
+[CHALLENGE] task_id=81886A attempt=2 challenge_solver=native_python
+[RESOLVE] task_id=81886A attempt=2 status=FAILED
+[YTDLP RESULT] task_id=81886A attempt=2 resolve=FAILED download=NA error_class=EXTRACTOR
+[ERROR]
+task_id=81886A
+attempt=2
+class=EXTRACTOR
+stage=RESOLVE
+message=ERROR: [TikTok] 7511751966347775254: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@dasha.eg0o/video/7511751966347775254
+[TikTok] 7511751966347775254: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7511751966347775254: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7511751966347775254: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[REQUEST]
+task_id=81886A
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:41:55
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7511751966347775254: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=81886A
+attempt=3
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=81886A
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_81886A.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:41:37
+refreshed=true
+
+[UA]
+task_id=81886A
+source=extension
+length=111
+
+[REFERER]
+task_id=81886A
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=81886A
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=81886A
+attempt=3
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=81886A
+attempt=3
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=81886A C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_11_1787377283\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@dasha.eg0o/video/7511751966347775254
+[RESOLVE] task_id=81886A attempt=3 status=START
+[CHALLENGE] task_id=81886A attempt=3 challenge_solver=NA
+============================================================
+[TIKTOK TASK END]
+task_id=81886A
+result=ABORTED
+attempts=3
+elapsed=37.1s
+final_error_class=EXTRACTOR
+final_failed_stage=RESOLVE
+============================================================
+
+============================================================
+[TASK END]
+task_id=81886A
+result=ABORTED
+attempts=3
+elapsed=37.1s
+final_error_class=EXTRACTOR
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+task_id=C719E6
+url=https://www.tiktok.com/@a/video/1
+time=2026-08-22 13:49:21
+============================================================
+
+[REQUEST]
+task_id=C719E6
+cookie=true
+ua=true
+referer=false
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=NA
+cookie_exists=true
+cookie_count=0
+cookie_size=29
+cookie_mtime=2026-08-22 13:49:21
+cookie_header=REDACTED
+sessionid=absent
+msToken=absent
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=C719E6
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=C719E6
+source=extension
+file=_dbg_orig.txt
+session_copy=_session_cookie_C719E6.txt
+exists=true
+size=29
+mtime=2026-08-22 13:49:21
+refreshed=true
+
+[UA]
+task_id=C719E6
+source=extension
+length=2
+
+[REFERER]
+task_id=C719E6
+source=NA
+value=NA
+
+[PROXY]
+task_id=C719E6
+enabled=false
+source=system
+value=default
+
+[YTDLP]
+task_id=C719E6
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=C719E6 yt-dlp
+[RESOLVE] task_id=C719E6 attempt=1 status=START
+[CHALLENGE] task_id=C719E6 attempt=1 challenge_solver=NA
+[RESOLVE] task_id=C719E6 attempt=1 status=FAILED
+[YTDLP RESULT] task_id=C719E6 attempt=1 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=C719E6
+attempt=1
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: Unable to extract universal data for rehydration
+action=INITIAL_READ
+challenge_solver=NA
+
+[YTDLP STDERR]
+ERROR: Unable to extract universal data for rehydration
+
+[TIKTOK RECOVERY]
+task_id=C719E6
+stage=RESOLVE
+attempt=2
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=2s
+
+[REQUEST]
+task_id=C719E6
+cookie=true
+ua=true
+referer=false
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=NA
+cookie_exists=true
+cookie_count=0
+cookie_size=29
+cookie_mtime=2026-08-22 13:49:21
+cookie_header=REDACTED
+retry_reason=ERROR: Unable to extract universal data for rehydration
+sessionid=absent
+msToken=absent
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=C719E6
+attempt=2
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=C719E6
+source=extension
+file=_dbg_orig.txt
+session_copy=_session_cookie_C719E6.txt
+exists=true
+size=29
+mtime=2026-08-22 13:49:21
+refreshed=true
+
+[UA]
+task_id=C719E6
+source=extension
+length=2
+
+[REFERER]
+task_id=C719E6
+source=NA
+value=NA
+
+[PROXY]
+task_id=C719E6
+enabled=false
+source=system
+value=default
+
+[YTDLP]
+task_id=C719E6
+attempt=2
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=C719E6 yt-dlp
+[RESOLVE] task_id=C719E6 attempt=2 status=START
+[CHALLENGE] task_id=C719E6 attempt=2 challenge_solver=NA
+[RESOLVE] task_id=C719E6 attempt=2 status=FAILED
+[YTDLP RESULT] task_id=C719E6 attempt=2 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=C719E6
+attempt=2
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: Unable to extract universal data for rehydration
+action=REFRESH_BROWSER_STATE
+challenge_solver=NA
+
+[YTDLP STDERR]
+ERROR: Unable to extract universal data for rehydration
+
+[TIKTOK RECOVERY]
+task_id=C719E6
+stage=RESOLVE
+attempt=3
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=6s
+
+[REQUEST]
+task_id=C719E6
+cookie=true
+ua=true
+referer=false
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=NA
+cookie_exists=true
+cookie_count=0
+cookie_size=29
+cookie_mtime=2026-08-22 13:49:21
+cookie_header=REDACTED
+retry_reason=ERROR: Unable to extract universal data for rehydration
+sessionid=absent
+msToken=absent
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=C719E6
+attempt=3
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=C719E6
+source=extension
+file=_dbg_orig.txt
+session_copy=_session_cookie_C719E6.txt
+exists=true
+size=29
+mtime=2026-08-22 13:49:21
+refreshed=true
+
+[UA]
+task_id=C719E6
+source=extension
+length=2
+
+[REFERER]
+task_id=C719E6
+source=NA
+value=NA
+
+[PROXY]
+task_id=C719E6
+enabled=false
+source=system
+value=default
+
+[YTDLP]
+task_id=C719E6
+attempt=3
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=C719E6 yt-dlp
+[RESOLVE] task_id=C719E6 attempt=3 status=START
+[CHALLENGE] task_id=C719E6 attempt=3 challenge_solver=NA
+[RESOLVE] task_id=C719E6 attempt=3 status=FAILED
+[YTDLP RESULT] task_id=C719E6 attempt=3 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=C719E6
+attempt=3
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: Unable to extract universal data for rehydration
+action=REFRESH_BROWSER_STATE
+challenge_solver=NA
+
+[YTDLP STDERR]
+ERROR: Unable to extract universal data for rehydration
+
+[TIKTOK RECOVERY]
+task_id=C719E6
+stage=RESOLVE
+attempt=4
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=12s
+
+[REQUEST]
+task_id=C719E6
+cookie=true
+ua=true
+referer=false
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=NA
+cookie_exists=true
+cookie_count=0
+cookie_size=29
+cookie_mtime=2026-08-22 13:49:21
+cookie_header=REDACTED
+retry_reason=ERROR: Unable to extract universal data for rehydration
+sessionid=absent
+msToken=absent
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=C719E6
+attempt=4
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=C719E6
+source=extension
+file=_dbg_orig.txt
+session_copy=_session_cookie_C719E6.txt
+exists=true
+size=29
+mtime=2026-08-22 13:49:21
+refreshed=true
+
+[UA]
+task_id=C719E6
+source=extension
+length=2
+
+[REFERER]
+task_id=C719E6
+source=NA
+value=NA
+
+[PROXY]
+task_id=C719E6
+enabled=false
+source=system
+value=default
+
+[YTDLP]
+task_id=C719E6
+attempt=4
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=C719E6 yt-dlp
+[RESOLVE] task_id=C719E6 attempt=4 status=START
+[CHALLENGE] task_id=C719E6 attempt=4 challenge_solver=NA
+[RESOLVE] task_id=C719E6 attempt=4 status=FAILED
+[YTDLP RESULT] task_id=C719E6 attempt=4 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=C719E6
+attempt=4
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: Unable to extract universal data for rehydration
+action=REFRESH_BROWSER_STATE
+challenge_solver=NA
+
+[YTDLP STDERR]
+ERROR: Unable to extract universal data for rehydration
+
+============================================================
+[TIKTOK TASK END]
+task_id=C719E6
+result=FAILED
+attempts=4
+elapsed=1.2s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+initial_message=ERROR: Unable to extract universal data for rehydration
+final_error_class=TIKTOK_RESOLVE
+final_error=UNIVERSAL_DATA
+final_failed_stage=RESOLVE
+============================================================
+
+============================================================
+[TASK END]
+task_id=C719E6
+result=FAILED
+attempts=4
+elapsed=1.3s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+final_error_class=TIKTOK_RESOLVE
+final_error=UNIVERSAL_DATA
+============================================================
+
+[YT-DLP]
+path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+version=2026.08.19
+source=local
+
+[ENVIRONMENT CHECK]
+Python=OK (3.11.9)
+FFmpeg=OK
+NVENC=OK
+Node.js=OK
+yt-dlp=OK
+yt-dlp版本=2026.08.19
+Cookie=OK
+Extension=OK
+Proxy=SYSTEM
+Chrome CDP=DISABLED
+
+[yt-dlp] version=2026.08.19 source=local update_check=skipped(0h ago)
+============================================================
+[TASK START]
+task_id=63136F
+platform=tiktok
+url=https://www.tiktok.com/@jackjerry/video/7537427845266689311
+start_time=2026-08-22 13:53:36
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=63136F
+url=https://www.tiktok.com/@jackjerry/video/7537427845266689311
+time=2026-08-22 13:53:40
+============================================================
+
+[REQUEST]
+task_id=63136F
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:53:40
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=63136F
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=63136F
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_63136F.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:44:37
+refreshed=true
+
+[UA]
+task_id=63136F
+source=extension
+length=111
+
+[REFERER]
+task_id=63136F
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=63136F
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=63136F
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=63136F
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=63136F C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_1_1787378016\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7537427845266689311
+[RESOLVE] task_id=63136F attempt=1 status=START
+[CHALLENGE] task_id=63136F attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=63136F attempt=1 status=FAILED
+[YTDLP RESULT] task_id=63136F attempt=1 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=63136F
+attempt=1
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7537427845266689311: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=INITIAL_READ
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jackjerry/video/7537427845266689311
+[TikTok] 7537427845266689311: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7537427845266689311: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7537427845266689311: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=63136F
+stage=RESOLVE
+attempt=2
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=2s
+
+[REQUEST]
+task_id=63136F
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:53:53
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7537427845266689311: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=63136F
+attempt=2
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=63136F
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_63136F.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:44:37
+refreshed=true
+
+[UA]
+task_id=63136F
+source=extension
+length=111
+
+[REFERER]
+task_id=63136F
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=63136F
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=63136F
+attempt=2
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=63136F
+attempt=2
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=63136F C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_1_1787378016\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7537427845266689311
+[RESOLVE] task_id=63136F attempt=2 status=START
+[CHALLENGE] task_id=63136F attempt=2 challenge_solver=native_python
+[RESOLVE] task_id=63136F attempt=2 status=FAILED
+[YTDLP RESULT] task_id=63136F attempt=2 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=63136F
+attempt=2
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7537427845266689311: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jackjerry/video/7537427845266689311
+[TikTok] 7537427845266689311: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7537427845266689311: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7537427845266689311: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=63136F
+stage=RESOLVE
+attempt=3
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=6s
+
+[REQUEST]
+task_id=63136F
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:54:09
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7537427845266689311: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=63136F
+attempt=3
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=63136F
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_63136F.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:44:37
+refreshed=true
+
+[UA]
+task_id=63136F
+source=extension
+length=111
+
+[REFERER]
+task_id=63136F
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=63136F
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=63136F
+attempt=3
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=63136F
+attempt=3
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=63136F C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_1_1787378016\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7537427845266689311
+[RESOLVE] task_id=63136F attempt=3 status=START
+[CHALLENGE] task_id=63136F attempt=3 challenge_solver=native_python
+[RESOLVE] task_id=63136F attempt=3 status=FAILED
+[YTDLP RESULT] task_id=63136F attempt=3 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=63136F
+attempt=3
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7537427845266689311: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jackjerry/video/7537427845266689311
+[TikTok] 7537427845266689311: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7537427845266689311: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7537427845266689311: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=63136F
+stage=RESOLVE
+attempt=4
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=12s
+
+[REQUEST]
+task_id=63136F
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:54:31
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7537427845266689311: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=63136F
+attempt=4
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=63136F
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_63136F.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:54:31
+refreshed=true
+
+[UA]
+task_id=63136F
+source=extension
+length=111
+
+[REFERER]
+task_id=63136F
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=63136F
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=63136F
+attempt=4
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=63136F
+attempt=4
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=63136F C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_1_1787378016\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7537427845266689311
+[RESOLVE] task_id=63136F attempt=4 status=START
+[CHALLENGE] task_id=63136F attempt=4 challenge_solver=native_python
+[RESOLVE] task_id=63136F attempt=4 status=SUCCESS
+[DOWNLOAD] task_id=63136F attempt=4 status=SUCCESS
+[YTDLP RESULT] task_id=63136F attempt=4 resolve=SUCCESS download=SUCCESS error_class=NA
+============================================================
+[TIKTOK TASK END]
+task_id=63136F
+result=SUCCESS
+attempts=4
+elapsed=75.6s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+initial_message=NONE
+final_error_class=NONE
+final_error=NONE
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=63136F
+result=SUCCESS
+attempts=4
+elapsed=75.6s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+final_error_class=NONE
+final_error=NONE
+============================================================
+
+============================================================
+[TASK START]
+task_id=4D5D52
+platform=tiktok
+url=https://www.tiktok.com/@jackjerry/video/7516653846811266334
+start_time=2026-08-22 13:55:12
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=4D5D52
+url=https://www.tiktok.com/@jackjerry/video/7516653846811266334
+time=2026-08-22 13:55:16
+============================================================
+
+[REQUEST]
+task_id=4D5D52
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:55:16
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=4D5D52
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=4D5D52
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_4D5D52.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:55:05
+refreshed=true
+
+[UA]
+task_id=4D5D52
+source=extension
+length=111
+
+[REFERER]
+task_id=4D5D52
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=4D5D52
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=4D5D52
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=4D5D52
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=4D5D52 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_2_1787378112\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7516653846811266334
+[RESOLVE] task_id=4D5D52 attempt=1 status=START
+[CHALLENGE] task_id=4D5D52 attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=4D5D52 attempt=1 status=FAILED
+[YTDLP RESULT] task_id=4D5D52 attempt=1 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=4D5D52
+attempt=1
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7516653846811266334: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=INITIAL_READ
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jackjerry/video/7516653846811266334
+[TikTok] 7516653846811266334: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7516653846811266334: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7516653846811266334: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=4D5D52
+stage=RESOLVE
+attempt=2
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=2s
+
+[REQUEST]
+task_id=4D5D52
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:55:28
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7516653846811266334: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=4D5D52
+attempt=2
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=4D5D52
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_4D5D52.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:55:05
+refreshed=true
+
+[UA]
+task_id=4D5D52
+source=extension
+length=111
+
+[REFERER]
+task_id=4D5D52
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=4D5D52
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=4D5D52
+attempt=2
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=4D5D52
+attempt=2
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=4D5D52 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_2_1787378112\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7516653846811266334
+[RESOLVE] task_id=4D5D52 attempt=2 status=START
+[CHALLENGE] task_id=4D5D52 attempt=2 challenge_solver=native_python
+[RESOLVE] task_id=4D5D52 attempt=2 status=FAILED
+[YTDLP RESULT] task_id=4D5D52 attempt=2 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=4D5D52
+attempt=2
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7516653846811266334: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jackjerry/video/7516653846811266334
+[TikTok] 7516653846811266334: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7516653846811266334: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7516653846811266334: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=4D5D52
+stage=RESOLVE
+attempt=3
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=6s
+
+[REQUEST]
+task_id=4D5D52
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:55:44
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7516653846811266334: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=4D5D52
+attempt=3
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=4D5D52
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_4D5D52.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:55:05
+refreshed=true
+
+[UA]
+task_id=4D5D52
+source=extension
+length=111
+
+[REFERER]
+task_id=4D5D52
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=4D5D52
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=4D5D52
+attempt=3
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=4D5D52
+attempt=3
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=4D5D52 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_2_1787378112\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7516653846811266334
+[RESOLVE] task_id=4D5D52 attempt=3 status=START
+[CHALLENGE] task_id=4D5D52 attempt=3 challenge_solver=native_python
+[RESOLVE] task_id=4D5D52 attempt=3 status=FAILED
+[YTDLP RESULT] task_id=4D5D52 attempt=3 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=4D5D52
+attempt=3
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7516653846811266334: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jackjerry/video/7516653846811266334
+[TikTok] 7516653846811266334: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7516653846811266334: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7516653846811266334: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=4D5D52
+stage=RESOLVE
+attempt=4
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=12s
+
+[REQUEST]
+task_id=4D5D52
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:56:07
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7516653846811266334: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=4D5D52
+attempt=4
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=4D5D52
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_4D5D52.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:55:05
+refreshed=true
+
+[UA]
+task_id=4D5D52
+source=extension
+length=111
+
+[REFERER]
+task_id=4D5D52
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=4D5D52
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=4D5D52
+attempt=4
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=4D5D52
+attempt=4
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=4D5D52 C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_2_1787378112\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7516653846811266334
+[RESOLVE] task_id=4D5D52 attempt=4 status=START
+[CHALLENGE] task_id=4D5D52 attempt=4 challenge_solver=native_python
+[RESOLVE] task_id=4D5D52 attempt=4 status=SUCCESS
+[DOWNLOAD] task_id=4D5D52 attempt=4 status=SUCCESS
+[YTDLP RESULT] task_id=4D5D52 attempt=4 resolve=SUCCESS download=SUCCESS error_class=NA
+============================================================
+[TIKTOK TASK END]
+task_id=4D5D52
+result=SUCCESS
+attempts=4
+elapsed=74.2s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+initial_message=NONE
+final_error_class=NONE
+final_error=NONE
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=4D5D52
+result=SUCCESS
+attempts=4
+elapsed=74.2s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+final_error_class=NONE
+final_error=NONE
+============================================================
+
+============================================================
+[TASK START]
+task_id=4291FB
+platform=tiktok
+url=https://www.tiktok.com/@notitsmenicksmithy/video/7574459911367609613
+start_time=2026-08-22 13:56:42
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=4291FB
+url=https://www.tiktok.com/@notitsmenicksmithy/video/7574459911367609613
+time=2026-08-22 13:56:46
+============================================================
+
+[REQUEST]
+task_id=4291FB
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:56:46
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=4291FB
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=4291FB
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_4291FB.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:55:05
+refreshed=true
+
+[UA]
+task_id=4291FB
+source=extension
+length=111
+
+[REFERER]
+task_id=4291FB
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=4291FB
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=4291FB
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=4291FB
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=4291FB C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_3_1787378202\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@notitsmenicksmithy/video/7574459911367609613
+[RESOLVE] task_id=4291FB attempt=1 status=START
+[CHALLENGE] task_id=4291FB attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=4291FB attempt=1 status=SUCCESS
+[DOWNLOAD] task_id=4291FB attempt=1 status=SUCCESS
+[YTDLP RESULT] task_id=4291FB attempt=1 resolve=SUCCESS download=SUCCESS error_class=NA
+============================================================
+[TIKTOK TASK END]
+task_id=4291FB
+result=SUCCESS
+attempts=1
+elapsed=21.6s
+initial_error_class=NONE
+initial_error=NONE
+initial_message=NONE
+final_error_class=NONE
+final_error=NONE
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=4291FB
+result=SUCCESS
+attempts=1
+elapsed=21.6s
+initial_error_class=NONE
+initial_error=NONE
+final_error_class=NONE
+final_error=NONE
+============================================================
+
+============================================================
+[TASK START]
+task_id=7030BD
+platform=tiktok
+url=https://www.tiktok.com/@jakeg_21/video/7490179416308436246
+start_time=2026-08-22 13:57:20
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=7030BD
+url=https://www.tiktok.com/@jakeg_21/video/7490179416308436246
+time=2026-08-22 13:57:26
+============================================================
+
+[REQUEST]
+task_id=7030BD
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:57:26
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=7030BD
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=7030BD
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_7030BD.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:57:05
+refreshed=true
+
+[UA]
+task_id=7030BD
+source=extension
+length=111
+
+[REFERER]
+task_id=7030BD
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=7030BD
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=7030BD
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=7030BD
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=7030BD C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_4_1787378240\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jakeg_21/video/7490179416308436246
+[RESOLVE] task_id=7030BD attempt=1 status=START
+[CHALLENGE] task_id=7030BD attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=7030BD attempt=1 status=FAILED
+[YTDLP RESULT] task_id=7030BD attempt=1 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=7030BD
+attempt=1
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7490179416308436246: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=INITIAL_READ
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jakeg_21/video/7490179416308436246
+[TikTok] 7490179416308436246: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7490179416308436246: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7490179416308436246: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=7030BD
+stage=RESOLVE
+attempt=2
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=2s
+
+[REQUEST]
+task_id=7030BD
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:57:39
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7490179416308436246: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=7030BD
+attempt=2
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=7030BD
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_7030BD.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:57:05
+refreshed=true
+
+[UA]
+task_id=7030BD
+source=extension
+length=111
+
+[REFERER]
+task_id=7030BD
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=7030BD
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=7030BD
+attempt=2
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=7030BD
+attempt=2
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=7030BD C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_4_1787378240\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jakeg_21/video/7490179416308436246
+[RESOLVE] task_id=7030BD attempt=2 status=START
+[CHALLENGE] task_id=7030BD attempt=2 challenge_solver=native_python
+[RESOLVE] task_id=7030BD attempt=2 status=FAILED
+[YTDLP RESULT] task_id=7030BD attempt=2 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=7030BD
+attempt=2
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7490179416308436246: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jakeg_21/video/7490179416308436246
+[TikTok] 7490179416308436246: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7490179416308436246: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7490179416308436246: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=7030BD
+stage=RESOLVE
+attempt=3
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=6s
+
+[REQUEST]
+task_id=7030BD
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:57:57
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7490179416308436246: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=7030BD
+attempt=3
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=7030BD
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_7030BD.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:57:05
+refreshed=true
+
+[UA]
+task_id=7030BD
+source=extension
+length=111
+
+[REFERER]
+task_id=7030BD
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=7030BD
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=7030BD
+attempt=3
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=7030BD
+attempt=3
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=7030BD C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_4_1787378240\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jakeg_21/video/7490179416308436246
+[RESOLVE] task_id=7030BD attempt=3 status=START
+[CHALLENGE] task_id=7030BD attempt=3 challenge_solver=native_python
+[RESOLVE] task_id=7030BD attempt=3 status=FAILED
+[YTDLP RESULT] task_id=7030BD attempt=3 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=7030BD
+attempt=3
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7490179416308436246: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jakeg_21/video/7490179416308436246
+[TikTok] 7490179416308436246: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7490179416308436246: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7490179416308436246: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=7030BD
+stage=RESOLVE
+attempt=4
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=12s
+
+[REQUEST]
+task_id=7030BD
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:58:27
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7490179416308436246: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=7030BD
+attempt=4
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=7030BD
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_7030BD.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:57:05
+refreshed=true
+
+[UA]
+task_id=7030BD
+source=extension
+length=111
+
+[REFERER]
+task_id=7030BD
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=7030BD
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=7030BD
+attempt=4
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=7030BD
+attempt=4
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=7030BD C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_4_1787378240\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jakeg_21/video/7490179416308436246
+[RESOLVE] task_id=7030BD attempt=4 status=START
+[CHALLENGE] task_id=7030BD attempt=4 challenge_solver=native_python
+[RESOLVE] task_id=7030BD attempt=4 status=SUCCESS
+[DOWNLOAD] task_id=7030BD attempt=4 status=SUCCESS
+[YTDLP RESULT] task_id=7030BD attempt=4 resolve=SUCCESS download=SUCCESS error_class=NA
+============================================================
+[TIKTOK TASK END]
+task_id=7030BD
+result=SUCCESS
+attempts=4
+elapsed=80.2s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+initial_message=NONE
+final_error_class=NONE
+final_error=NONE
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=7030BD
+result=SUCCESS
+attempts=4
+elapsed=80.3s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+final_error_class=NONE
+final_error=NONE
+============================================================
+
+============================================================
+[TASK START]
+task_id=CD026E
+platform=tiktok
+url=https://www.tiktok.com/@jackjerry/video/7505139951973960990
+start_time=2026-08-22 13:58:50
+============================================================
+
+[ENVIRONMENT]
+python_version=3.11.9
+os=Windows
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+node_path=C:\Program Files\nodejs\node.EXE
+ffmpeg_path=C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe
+
+============================================================
+[TIKTOK TASK START]
+task_id=CD026E
+url=https://www.tiktok.com/@jackjerry/video/7505139951973960990
+time=2026-08-22 13:58:53
+============================================================
+
+[REQUEST]
+task_id=CD026E
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=INITIAL_READ
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:58:54
+cookie_header=REDACTED
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=CD026E
+attempt=1
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=CD026E
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_CD026E.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:58:37
+refreshed=true
+
+[UA]
+task_id=CD026E
+source=extension
+length=111
+
+[REFERER]
+task_id=CD026E
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=CD026E
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=CD026E
+attempt=1
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=CD026E
+attempt=1
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=CD026E C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_5_1787378330\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7505139951973960990
+[RESOLVE] task_id=CD026E attempt=1 status=START
+[CHALLENGE] task_id=CD026E attempt=1 challenge_solver=native_python
+[RESOLVE] task_id=CD026E attempt=1 status=FAILED
+[YTDLP RESULT] task_id=CD026E attempt=1 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=CD026E
+attempt=1
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7505139951973960990: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=INITIAL_READ
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jackjerry/video/7505139951973960990
+[TikTok] 7505139951973960990: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7505139951973960990: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7505139951973960990: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=CD026E
+stage=RESOLVE
+attempt=2
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=2s
+
+[REQUEST]
+task_id=CD026E
+cookie=true
+ua=true
+referer=true
+concurrency=8
+action=REFRESH_BROWSER_STATE
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+cookie_exists=true
+cookie_count=45
+cookie_size=9899
+cookie_mtime=2026-08-22 13:59:18
+cookie_header=REDACTED
+retry_reason=ERROR: [TikTok] 7505139951973960990: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+sessionid=absent
+msToken=present
+sid_tt=absent
+ttwid=absent
+tt_chain_token=absent
+passport_csrf_token=absent
+
+============================================================
+[ATTEMPT]
+task_id=CD026E
+attempt=2
+concurrency=8
+============================================================
+
+[COOKIE]
+task_id=CD026E
+source=extension
+file=_all_cookies.txt
+session_copy=_session_cookie_CD026E.txt
+exists=true
+size=9899
+mtime=2026-08-22 13:59:05
+refreshed=true
+
+[UA]
+task_id=CD026E
+source=extension
+length=111
+
+[REFERER]
+task_id=CD026E
+source=extension
+value=https://www.tiktok.com/search?q=Jack+Jerry+prediction+filter&t=1787376624627
+
+[PROXY]
+task_id=CD026E
+enabled=false
+source=system
+value=default
+
+[JS RUNTIME]
+task_id=CD026E
+attempt=2
+enabled=true
+runtime=node
+path=C:\Program Files\nodejs\node.exe
+js_runtime_args=--no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe
+
+[YTDLP]
+task_id=CD026E
+attempt=2
+stage=RESOLVE+DOWNLOAD
+concurrency=8
+retries=5
+extractor_retries=3
+fragment_retries=5
+
+[COMMAND] task_id=CD026E C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe --newline --no-warnings --no-playlist --no-check-certificates --no-mtime --encoding utf-8 --user-agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 --ffmpeg-location C:\Users\Administrator\Desktop\下载\ffmpeg\bin\ffmpeg.exe -f bv*+ba/b --merge-output-format mp4 --windows-filenames --socket-timeout 30 --retries 5 --fragment-retries 5 --extractor-retries 3 --file-access-retries 3 --retry-sleep exp=1:30 --buffer-size 16M --trim-filenames 200 --skip-unavailable-fragments -o C:\Users\Administrator\Desktop\下载\_download_temp\job_5_1787378330\source.%(ext)s --no-js-runtimes --js-runtimes node:C:\Program Files\nodejs\node.exe --cookies REDACTED --referer https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --add-header Referer: https://www.tiktok.com/search?q=Jack%20Jerry%20prediction%20filter&t=1787376624627 --http-chunk-size 10M --add-header Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8 --add-header Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7 --add-header Accept-Encoding: gzip, deflate, br --add-header Connection: keep-alive --add-header Upgrade-Insecure-Requests: 1 --add-header Sec-Fetch-Dest: document --add-header Sec-Fetch-Mode: navigate --add-header Sec-Fetch-Site: none --add-header Sec-Fetch-User: ?1 -N 8 https://www.tiktok.com/@jackjerry/video/7505139951973960990
+[RESOLVE] task_id=CD026E attempt=2 status=START
+[CHALLENGE] task_id=CD026E attempt=2 challenge_solver=native_python
+[RESOLVE] task_id=CD026E attempt=2 status=FAILED
+[YTDLP RESULT] task_id=CD026E attempt=2 resolve=FAILED download=NA error_class=TIKTOK_RESOLVE reason=UNIVERSAL_DATA
+[ERROR]
+task_id=CD026E
+attempt=2
+class=EXTRACTOR
+category=TIKTOK_RESOLVE
+stage=RESOLVE
+reason=UNIVERSAL_DATA
+message=ERROR: [TikTok] 7505139951973960990: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+action=REFRESH_BROWSER_STATE
+challenge_solver=native_python
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@jackjerry/video/7505139951973960990
+[TikTok] 7505139951973960990: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7505139951973960990: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7505139951973960990: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[TIKTOK RECOVERY]
+task_id=CD026E
+stage=RESOLVE
+attempt=3
+reason=UNIVERSAL_DATA
+action=REFRESH_COOKIE
+action=REFRESH_UA
+action=REFRESH_REFERER
+action=REBUILD_YTDLP_ARGS
+concurrency=8
+wait=6s
+
+============================================================
+[TIKTOK TASK END]
+task_id=CD026E
+result=ABORTED
+attempts=2
+elapsed=44.3s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+initial_message=ERROR: [TikTok] 7505139951973960990: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+final_error_class=TIKTOK_RESOLVE
+final_error=UNIVERSAL_DATA
+final_failed_stage=NA
+============================================================
+
+============================================================
+[TASK END]
+task_id=CD026E
+result=ABORTED
+attempts=2
+elapsed=44.3s
+initial_error_class=TIKTOK_RESOLVE
+initial_error=UNIVERSAL_DATA
+final_error_class=TIKTOK_RESOLVE
+final_error=UNIVERSAL_DATA
+============================================================
+
