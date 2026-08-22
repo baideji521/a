@@ -110,183 +110,122 @@ COOKIES_DIR = RUN_DIR / "cookies"
 
 
 # ============================================================
-# TikTok 下载策略（三级：普通下载 → 降并发重试 → Session 回退）
-# Cookie / UA / Referer 由浏览器扩展同步，不再依赖 Chrome CDP
-# ============================================================
-
-# 总尝试次数（含首次，不无限重试）
-TIKTOK_MAX_RETRIES = 4
-# 每次尝试的并发片段数（失败后逐步降低：8 → 4 → 4 → 2）
-TIKTOK_CONCURRENCY_STAGES = [8, 4, 4, 2]
-# 第 2/3/4 次尝试前的等待秒数
-TIKTOK_RETRY_DELAYS = [5, 8, 12]
-# TikTok 默认 Referer（扩展能提供实际页面 Referer 时优先使用扩展值）
-TIKTOK_DEFAULT_REFERER = "https://www.tiktok.com/"
-
-
-# ============================================================
-# 下载代理（本机 v2rayN 混合端口）
+# 任务日志（供上传 GitHub 诊断，与 GUI 日志完全分离）
 #
-# 所有平台的 yt-dlp 下载（TikTok / YouTube / Instagram 等）统一走此代理，
-# 通过 --proxy 明确传入，不依赖系统代理 / TUN 是否开启。
-# 只影响 yt-dlp 下载：不修改 v2rayN、不改系统代理、不改浏览器代理。
-# Retry 全程使用同一个代理，不切换。
-# ============================================================
-
-TIKTOK_PROXY_ENABLED = True
-TIKTOK_PROXY = "http://127.0.0.1:10808"
-
-
-def tiktok_parse_proxy(proxy_url):
-    """解析代理配置为 (类型, 主机, 端口)，仅用于日志展示"""
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(str(proxy_url))
-        return (
-            parsed.scheme or "NA",
-            parsed.hostname or "NA",
-            str(parsed.port) if parsed.port else "NA"
-        )
-    except Exception:
-        return ("NA", "NA", "NA")
-
-
-# ============================================================
-# TikTok 调试日志（专用于 GitHub 诊断，与 GUI 日志完全分离）
-#
-# 日志位置：logs/tiktok_debug.log（程序启动时清空，只保留本轮运行）
-# 开关：TIKTOK_DEBUG_LOG = True / False
-# 脱敏：永不写入 Cookie 真实值、Session、Authorization、密码；
+# 日志位置：logs/tiktok_debug.log
+# 滚动：单文件超过 10MB 后滚动为 tiktok_debug.1.log / .2.log
+# 脱敏：永不写入 Cookie 真实值 / Session / Authorization / 密码；
 #       关键 Cookie 只记录 present / absent
 # ============================================================
 
-TIKTOK_DEBUG_LOG = True
-TIKTOK_DEBUG_DIR = RUN_DIR / "logs"
-TIKTOK_DEBUG_LOG_FILE = TIKTOK_DEBUG_DIR / "tiktok_debug.log"
+TASK_DEBUG_LOG_ENABLED = True
+TASK_DEBUG_DIR = RUN_DIR / "logs"
+TASK_DEBUG_LOG_FILE = TASK_DEBUG_DIR / "tiktok_debug.log"
+TASK_DEBUG_MAX_BYTES = 10 * 1024 * 1024
+TASK_DEBUG_BACKUP_COUNT = 2
 
-_tiktok_debug_lock = threading.Lock()
+_task_debug_lock = threading.Lock()
 
 # URL 中需要脱敏的查询参数关键词（命中则值替换为 REDACTED）
-TIKTOK_URL_SENSITIVE_QUERY = (
+TASK_URL_SENSITIVE_QUERY = (
     "token", "session", "sig", "sign", "key",
-    "auth", "secret", "pass", "credential"
+    "auth", "secret", "pass", "code",
 )
 
-# TikTok 关键 Cookie 名（日志中只记录是否存在，绝不记录真实值）
-TIKTOK_KEY_COOKIES = (
+# 关键 Cookie：只记录存在性，不记录真实值
+TASK_KEY_COOKIES = (
     "sessionid", "msToken", "sid_tt",
-    "sid_guard", "passport_csrf_token", "ttwid"
+    "ttwid", "tt_chain_token", "passport_csrf_token",
 )
 
 
-def tiktok_debug(*lines):
-    """追加写入 TikTok 调试日志（关闭开关时完全无操作）"""
-    if not TIKTOK_DEBUG_LOG:
-        return
-    try:
-        TIKTOK_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
-        with _tiktok_debug_lock:
-            with open(TIKTOK_DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
-                for line in lines:
-                    f.write(str(line).rstrip("\n") + "\n")
-    except Exception:
-        pass
-
-
-def tiktok_debug_section(title, pairs, bordered=False):
-    """写入一个日志段落：[TITLE] + key=value 行"""
-    body = [f"[{title}]"] + [f"{k}={v}" for k, v in pairs]
-    if bordered:
-        sep = "=" * 60
-        tiktok_debug(sep, *body, sep)
-    else:
-        tiktok_debug(*body)
-    tiktok_debug("")
-
-
-def init_tiktok_debug_log():
-    """程序启动时清空旧日志：GitHub 上永远只有本轮运行的诊断信息"""
-    if not TIKTOK_DEBUG_LOG:
-        return
-    try:
-        TIKTOK_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
-        header = (
-            "# TikTok debug log（已脱敏，可安全上传 GitHub）\n"
-            f"# session_start={time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        )
-        with _tiktok_debug_lock:
-            TIKTOK_DEBUG_LOG_FILE.write_text(header, encoding="utf-8")
-    except Exception:
-        pass
-
-
-def tiktok_redact_url(url):
-    """URL 脱敏：保留路径，将敏感查询参数的值替换为 REDACTED"""
+def task_redact_url(url):
+    """脱敏 URL 中的敏感查询参数（值替换为 REDACTED）"""
     try:
         from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
         parsed = urlparse(str(url))
         if not parsed.query:
             return str(url)
-        query = []
-        for key, value in parse_qsl(parsed.query, keep_blank_values=True):
-            if any(s in key.lower() for s in TIKTOK_URL_SENSITIVE_QUERY):
-                query.append((key, "REDACTED"))
+        pairs = []
+        for k, v in parse_qsl(parsed.query, keep_blank_values=True):
+            if any(s.lower() in k.lower() for s in TASK_URL_SENSITIVE_QUERY):
+                pairs.append((k, "REDACTED"))
             else:
-                query.append((key, value))
-        return urlunparse(parsed._replace(query=urlencode(query)))
+                pairs.append((k, v))
+        return urlunparse(parsed._replace(query=urlencode(pairs)))
     except Exception:
         return str(url)
 
 
-def tiktok_cookie_stats(path):
-    """统计 Netscape Cookie 文件（脱敏）：大小 / 条数 / mtime / 关键 Cookie 是否存在"""
-    info = {
-        "exists": False,
-        "size": 0,
-        "count": 0,
-        "mtime": "NA",
-    }
-    for name in TIKTOK_KEY_COOKIES:
-        info[name] = "absent"
+def task_debug(*lines):
+    """追加写入 logs/tiktok_debug.log（线程安全，超过 10MB 自动滚动）"""
+    if not TASK_DEBUG_LOG_ENABLED:
+        return
     try:
-        path = Path(path)
-        if not path.exists():
-            return info
-        st = path.stat()
-        info["exists"] = True
-        info["size"] = st.st_size
-        info["mtime"] = time.strftime(
-            "%Y-%m-%d %H:%M:%S",
-            time.localtime(st.st_mtime)
-        )
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        names = set()
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") and not stripped.startswith("#HttpOnly_"):
-                continue
-            parts = stripped.split("\t")
-            if len(parts) >= 7:
-                names.add(parts[5])
-                info["count"] += 1
-        for name in TIKTOK_KEY_COOKIES:
-            # Cookie 名大小写不敏感（如 msToken / mstoken）
-            if any(n.lower() == name.lower() for n in names):
-                info[name] = "present"
+        with _task_debug_lock:
+            TASK_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+            if TASK_DEBUG_LOG_FILE.exists() and TASK_DEBUG_LOG_FILE.stat().st_size > TASK_DEBUG_MAX_BYTES:
+                # tiktok_debug.log → tiktok_debug.1.log → tiktok_debug.2.log（备份在日志同目录）
+                log_dir = TASK_DEBUG_LOG_FILE.parent
+                for i in range(TASK_DEBUG_BACKUP_COUNT, 1, -1):
+                    src = log_dir / f"{TASK_DEBUG_LOG_FILE.stem}.{i - 1}{TASK_DEBUG_LOG_FILE.suffix}"
+                    dst = log_dir / f"{TASK_DEBUG_LOG_FILE.stem}.{i}{TASK_DEBUG_LOG_FILE.suffix}"
+                    if src.exists():
+                        os.replace(str(src), str(dst))
+                dst = log_dir / f"{TASK_DEBUG_LOG_FILE.stem}.1{TASK_DEBUG_LOG_FILE.suffix}"
+                os.replace(str(TASK_DEBUG_LOG_FILE), str(dst))
+            with open(TASK_DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
+                for line in lines:
+                    f.write(str(line) + "\n")
     except Exception:
         pass
-    return info
 
 
-_YTDLP_VERSION_CACHE = None
+def task_debug_section(title, pairs, bordered=False):
+    """写入 [TITLE] key=value 区段（只允许传入已脱敏字段）"""
+    if bordered:
+        task_debug("=" * 60)
+    task_debug(f"[{title}]")
+    for k, v in pairs:
+        task_debug(f"{k}={v}")
+    if bordered:
+        task_debug("=" * 60)
+    task_debug("")
+
+
+def task_cookie_stats(cookie_path):
+    """Cookie 文件统计：存在性 / 大小 / 条数 / mtime / 关键 Cookie 存在性（绝不读取真实值入日志）"""
+    stats = {"exists": False, "size": 0, "count": 0, "mtime": "NA"}
+    for name in TASK_KEY_COOKIES:
+        stats[name] = "absent"
+    try:
+        p = Path(cookie_path)
+        if p.exists():
+            st = p.stat()
+            stats["exists"] = True
+            stats["size"] = st.st_size
+            stats["mtime"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime))
+            names = set()
+            count = 0
+            with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    parts = line.split("\t")
+                    if len(parts) >= 7 and not line.startswith("#"):
+                        count += 1
+                        names.add(parts[5])
+            stats["count"] = count
+            for name in TASK_KEY_COOKIES:
+                stats[name] = "present" if name in names else "absent"
+    except Exception:
+        pass
+    return stats
 
 
 def get_ytdlp_version():
-    """获取 yt-dlp 版本（整个会话只探测一次）"""
-    global _YTDLP_VERSION_CACHE
-    if _YTDLP_VERSION_CACHE is not None:
-        return _YTDLP_VERSION_CACHE
-    version = "unknown"
+    """读取 yt-dlp 版本号（启动日志与任务日志使用，便于判断版本是否过旧）"""
     try:
         result = subprocess.run(
             [str(YTDLP_EXE), "--version"],
@@ -298,11 +237,56 @@ def get_ytdlp_version():
         )
         out = (result.stdout or "").strip()
         if out:
-            version = out.splitlines()[0]
+            return out.splitlines()[0]
     except Exception:
         pass
-    _YTDLP_VERSION_CACHE = version
-    return version
+    return "unknown"
+
+
+def check_environment():
+    """启动环境检查，返回 [(项目, 状态), ...]
+
+    代理由系统 / v2rayN / TUN 负责，程序不绑定任何代理端口：Proxy = SYSTEM。
+    Chrome CDP 已移除：DISABLED。
+    """
+    import shutil
+
+    rows = []
+    rows.append(("Python", f"OK ({sys.version.split()[0]})"))
+    rows.append(("FFmpeg", "OK" if check_file(FFMPEG_EXE) else "MISSING"))
+
+    nvenc = "UNKNOWN"
+    if check_file(FFMPEG_EXE):
+        try:
+            r = subprocess.run(
+                [str(FFMPEG_EXE), "-hide_banner", "-encoders"],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="ignore", timeout=15
+            )
+            nvenc = "OK" if "h264_nvenc" in (r.stdout or "") else "NO"
+        except Exception:
+            nvenc = "UNKNOWN"
+    rows.append(("NVENC", nvenc))
+
+    node_path = shutil.which("node")
+    if not node_path and (RUN_DIR / "nodejs" / "node.exe").exists():
+        node_path = str(RUN_DIR / "nodejs" / "node.exe")
+    rows.append(("Node.js", "OK" if node_path else "MISSING"))
+
+    rows.append(("yt-dlp", "OK" if check_file(YTDLP_EXE) else "MISSING"))
+    rows.append(("yt-dlp版本", get_ytdlp_version()))
+
+    cookie_ok = (
+        (COOKIES_DIR / "_all_cookies.txt").exists()
+        or any((COOKIES_DIR / d / "_default.txt").exists()
+               for d in ("tiktok.com", "youtube.com", "instagram.com"))
+        or COOKIE_FILE.exists()
+    )
+    rows.append(("Cookie", "OK" if cookie_ok else "MISSING"))
+    rows.append(("Extension", "OK" if (UA_FILE.exists() or cookie_ok) else "等待扩展同步"))
+    rows.append(("Proxy", "SYSTEM"))
+    rows.append(("Chrome CDP", "DISABLED"))
+    return rows
 
 
 # ============================================================
@@ -438,14 +422,17 @@ class OmniGetBridgeHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "message": "Missing url"})
                 return
 
-            # 扩展发送的 Cookie + UA + Referer 一起处理（统一请求上下文来源）
+            # 扩展发送的 Cookie + UA 一起处理
             cookies = data.get("cookies", [])
             ua = data.get("userAgent", "").strip()
-            referer = str(data.get("referer", "") or "").strip()
 
-            # 扩展同步实际页面 Referer（按域名保存，下载时构造请求上下文）
+            # 扩展同时发送页面 Referer：按域名保存，供 yt-dlp 作为通用请求参数使用
+            referer = str(data.get("referer", "") or "").strip()
             if referer:
-                self.server.bridge.save_referer(referer)
+                try:
+                    self.server.bridge.save_referer(referer)
+                except Exception as e:
+                    self.server.bridge.log(f"Referer 保存失败：{e}")
 
             # 如果有 Cookie，自动更新
             if cookies and self.server.bridge.cookies_callback:
@@ -484,9 +471,12 @@ class OmniGetBridgeHandler(BaseHTTPRequestHandler):
             source_url = data.get("sourceUrl", "")
             ua = data.get("userAgent", "").strip()
 
-            # 捕获页面即保存该页面 Referer（供下载时构造请求上下文）
+            # 自动捕获模式下用来源页面 URL 作为 Referer 保存（不伪造，无则不写）
             if source_url:
-                self.server.bridge.save_referer(source_url)
+                try:
+                    self.server.bridge.save_referer(source_url)
+                except Exception as e:
+                    self.server.bridge.log(f"Referer 保存失败：{e}")
 
             if cookies and self.server.bridge.cookies_callback:
                 try:
@@ -558,24 +548,25 @@ class OmniGetBridge:
             except Exception as e:
                 self.log(f"URL 回调执行失败：{e}")
 
-    def save_referer(self, referer_url):
-        """保存扩展同步的页面 Referer（按根域名）
+    def save_referer(self, referer):
+        """按根域名保存扩展同步的页面 Referer → cookies/<域名>/_referer.txt
 
-        供下载时构造请求上下文：扩展提供的实际页面地址优先于默认值。
-        扩展是增强能力，不是下载前置条件，保存失败不影响任何流程。
+        全平台通用；下载时若文件存在则作为 --referer 传给 yt-dlp，
+        不存在时不伪造。失败仅记日志，不影响其他流程。
         """
         try:
-            referer_url = str(referer_url or "").strip()
-            if not referer_url.startswith(("http://", "https://")):
+            referer = str(referer or "").strip()
+            if not referer:
                 return
-            root = CookieManager.root_domain_of(
-                CookieManager._extract_host(referer_url)
-            )
+            host = CookieManager._extract_host(referer)
+            root = CookieManager.root_domain_of(host)
             if not root:
                 return
-            target_dir = COOKIES_DIR / CookieManager._safe_domain_segment(root)
+            seg = CookieManager._safe_domain_segment(root)
+            target_dir = COOKIES_DIR / seg
             target_dir.mkdir(parents=True, exist_ok=True)
-            write_text_file(target_dir / "_referer.txt", referer_url)
+            write_text_file(target_dir / "_referer.txt", referer)
+            self.log(f"Referer 已更新：{seg}")
         except Exception as e:
             self.log(f"Referer 保存失败：{e}")
 
@@ -1538,10 +1529,6 @@ class DownloadThread(QThread):
 
         self.failed = 0
 
-        # UA / TikTok Cookie 解析缓存（按文件 mtime 失效，扩展更新后自动重新加载）
-        self._ua_cache = None
-        self.tiktok_cookie_cache = {}
-
     def stop(self):
 
         self.stop_flag = True
@@ -1592,31 +1579,37 @@ class DownloadThread(QThread):
                 "警告：FFprobe 未找到。"
             )
 
-    def get_ua(self, force_reload=False):
-        """读取扩展同步的 UA（browser_ua.txt）
+    def get_ua(self):
 
-        按文件 mtime 缓存：文件未变化时直接使用缓存，扩展更新后自动重新加载。
-        不随机生成 UA，保证与扩展 Cookie 对应。
-        """
-        try:
-            mtime = UA_FILE.stat().st_mtime if UA_FILE.exists() else 0
-        except Exception:
-            mtime = 0
-
-        if (
-            not force_reload
-            and self._ua_cache is not None
-            and self._ua_cache[0] == mtime
-        ):
-            return self._ua_cache[1]
-
-        ua = read_text_file(UA_FILE)
+        ua = read_text_file(
+            UA_FILE
+        )
 
         if not ua:
+
             ua = DEFAULT_UA
 
-        self._ua_cache = (mtime, ua)
         return ua
+
+    def get_referer(self, url):
+        """获取该 URL 对应平台的请求 Referer（全平台通用）
+
+        优先使用扩展同步的实际页面地址（cookies/<根域名>/_referer.txt）；
+        缺失时返回 None，不伪造、不为此打开浏览器。
+        """
+        try:
+            root = CookieManager.root_domain_of(
+                CookieManager._extract_host(url)
+            )
+            if root:
+                referer = read_text_file(
+                    self.cookies_dir / root / "_referer.txt"
+                )
+                if referer:
+                    return referer
+        except Exception:
+            pass
+        return None
 
     # Cookie 新鲜度阈值（秒）：超过此时间认为可能过期
     COOKIE_STALE_THRESHOLD = 2 * 3600  # 2 小时
@@ -1642,12 +1635,7 @@ class DownloadThread(QThread):
 
         优先使用统一 Cookie 文件（包含浏览器全部 Cookie，yt-dlp 自动按域名匹配）
         回退到按域名分类存储，最后回退到旧的 cookies.txt
-
-        TikTok 例外：按域名独立 Cookie（不使用统一 Cookie 文件），见 get_tiktok_cookie_args
         """
-        if url and detect_platform(url) == "tiktok":
-            return self.get_tiktok_cookie_args(url)
-
         args = []
 
         # 优先使用统一 Cookie 文件（扩展自动同步全部 Cookie）
@@ -1710,87 +1698,6 @@ class DownloadThread(QThread):
 
         return args
 
-    def get_tiktok_cookie_args(self, url, force_reload=False):
-        """TikTok 专用 Cookie 选择：按平台独立，不用统一 Cookie 文件
-
-        优先级：
-        1. 扩展最新同步的 cookies/tiktok.com/_default.txt
-        2. 本地关联域名 Cookie（tiktokcdn.com）
-        3. 无 Cookie（继续下载，扩展不是强制依赖）
-
-        用文件 mtime 作为缓存签名（tiktok_cookie_cache）：
-        文件未变化时直接复用缓存，扩展更新文件后自动重新解析。
-        """
-        candidates = [
-            self.cookies_dir / d / "_default.txt"
-            for d in ("tiktok.com", "tiktokcdn.com")
-        ]
-
-        # 缓存签名 = 所有存在的候选文件的 (路径, mtime)
-        signature = []
-        for path in candidates:
-            try:
-                if path.exists():
-                    signature.append((str(path), path.stat().st_mtime))
-            except Exception:
-                continue
-        signature = tuple(signature)
-
-        if not force_reload:
-            cached = self.tiktok_cookie_cache.get("tiktok")
-            if cached is not None and cached[0] == signature:
-                return cached[1]
-
-        args = []
-        chosen = next((p for p in candidates if p.exists()), None)
-        if chosen is not None:
-            age, status = self._check_cookie_freshness(chosen)
-            if status == "expired":
-                self.log(f"⚠ TikTok Cookie 可能已过期（{int(age/3600)} 小时前更新），建议在浏览器中刷新 TikTok 页面")
-            else:
-                self.log(f"[TikTok] 使用扩展同步的 Cookie：{chosen}")
-            args = ["--cookies", str(chosen)]
-        else:
-            self.log("[TikTok] 无可用 Cookie，继续无 Cookie 下载（扩展未同步不阻断下载）")
-
-        self.tiktok_cookie_cache["tiktok"] = (signature, args)
-        return args
-
-    def get_referer(self, url):
-        """获取请求 Referer：优先扩展同步的实际页面地址，其次平台默认值"""
-        try:
-            root = CookieManager.root_domain_of(
-                CookieManager._extract_host(url)
-            )
-            if root:
-                referer = read_text_file(
-                    self.cookies_dir / root / "_referer.txt"
-                )
-                if referer:
-                    return referer
-        except Exception:
-            pass
-
-        if detect_platform(url) == "tiktok":
-            return TIKTOK_DEFAULT_REFERER
-        return None
-
-    def _build_tiktok_context(self, url, force_reload=False):
-        """构造 TikTok 统一请求上下文：Cookie + UA + Referer + Proxy
-
-        四者作为同一个请求环境一起使用，保持对应，不分别随机获取。
-        force_reload=True 时绕过缓存，重新读取扩展最新同步的文件（Session 回退阶段使用）。
-        Proxy 全程固定为 TIKTOK_PROXY，Retry 不切换。
-        """
-        if force_reload:
-            self.log("[TikTok] 重新读取扩展同步的 Cookie / UA / Referer")
-        return {
-            "cookie_args": self.get_tiktok_cookie_args(url, force_reload=force_reload),
-            "ua": self.get_ua(force_reload=force_reload),
-            "referer": self.get_referer(url),
-            "proxy": TIKTOK_PROXY if TIKTOK_PROXY_ENABLED else None,
-        }
-
     def get_video_id(self, url):
 
         try:
@@ -1802,10 +1709,6 @@ class DownloadThread(QThread):
                 "--no-warnings",
                 url
             ]
-
-            # 元数据解析同样走统一代理，保证与下载环境一致
-            if TIKTOK_PROXY_ENABLED and TIKTOK_PROXY:
-                cmd.extend(["--proxy", TIKTOK_PROXY])
 
             result = subprocess.run(
                 cmd,
@@ -1877,7 +1780,7 @@ class DownloadThread(QThread):
 
     def build_ytdlp_args(self, url, job_dir, ua, cookie_args, player_client=None,
                          referer=None, concurrency=None):
-        """构建 yt-dlp 命令参数，支持 YouTube player_client / TikTok 请求上下文配置"""
+        """构建 yt-dlp 命令参数，支持 YouTube player_client / 通用 Referer / TikTok 并发配置"""
         self.log(f"[DEBUG] build_ytdlp_args 被调用: {url[:60]}...")
         output_template = job_dir / "source.%(ext)s"
 
@@ -1914,9 +1817,9 @@ class DownloadThread(QThread):
 
         cmd.extend(cookie_args)
 
-        # 代理：所有平台统一走本机代理（明确传入 --proxy，不依赖系统代理 / TUN）
-        if TIKTOK_PROXY_ENABLED and TIKTOK_PROXY:
-            cmd.extend(["--proxy", TIKTOK_PROXY])
+        # Referer：全平台通用请求参数。有扩展同步的有效值时传递，缺失不伪造。
+        if referer:
+            cmd.extend(["--referer", referer])
 
         # TikTok 特定参数：添加完整的浏览器请求头
         is_tiktok_cmd = detect_platform(url) == "tiktok"
@@ -1934,16 +1837,11 @@ class DownloadThread(QThread):
                 "--add-header", "Sec-Fetch-User: ?1",
             ])
             self.log("[yt-dlp] TikTok 模式：启用完整浏览器请求头")
-
-            # Referer：优先扩展同步的实际页面地址，其次默认值（不随机）
-            if not referer:
-                referer = TIKTOK_DEFAULT_REFERER
-            cmd.extend(["--referer", referer])
-
-            # 并发片段数：失败后逐步降低（8 → 4 → 4 → 2）
-            workers = concurrency or TIKTOK_CONCURRENCY_STAGES[0]
+            
+            # TikTok 并发片段数：默认 8，失败后降级为 4（唯一保留的 TikTok 专用增强）
+            workers = concurrency or 8
             cmd.extend(["-N", str(workers)])
-            self.log(f"[yt-dlp] TikTok 模式：并发 {workers}，Referer {referer}")
+            self.log(f"[yt-dlp] TikTok 模式：启用 {workers} 个并发片段")
 
         # YouTube 特定参数
         is_youtube = detect_platform(url) == "youtube"
@@ -2006,24 +1904,32 @@ class DownloadThread(QThread):
             pass
 
     def download_source(self, url, job_dir):
-        """下载视频源，支持网络重试（所有平台）
+        """下载视频源
 
-        TikTok：三级策略（普通下载 → 降并发重试 → Session 回退），见 _download_tiktok
-        其他平台：网络波动自动重试（最多 3 次）
-        不再使用 YouTube player_client 轮换，避免被检测为异常行为
+        TikTok：并发降级 -N 8 → -N 4（见 _download_tiktok），不预请求、不依赖浏览器是否打开
+        其他平台：原版流程（预请求 + 网络波动自动重试，最多 3 次）
+        所有任务都以 task_id 记录到 logs/tiktok_debug.log（已脱敏）
         """
         platform = detect_platform(url)
 
-        # TikTok 走专用三级重试流程：只消费扩展同步的文件，不连接浏览器、不后台访问 TikTok
         if platform == "tiktok":
             return self._download_tiktok(url, job_dir)
 
+        return self._download_generic(url, job_dir, platform)
+
+    def _download_generic(self, url, job_dir, platform):
+        """原版下载流程（非 TikTok 平台）：预请求 + 网络重试，叠加任务日志"""
+        task_id = secrets.token_hex(3).upper()
+        task_start = time.time()
+        self._task_log_start(task_id, url, platform)
+
         ua = self.get_ua()
         cookie_args = self.get_cookie_args(url)
+        referer = self.get_referer(url)
         is_youtube = platform == "youtube"
 
         # 需要预请求的平台列表（模拟用户点击，避免被识别为机器人）
-        # 注意：TikTok 不做预请求/后台访问，浏览器活跃状态由用户 + 扩展负责
+        # 注意：TikTok 不做任何预请求/后台访问，浏览器活跃由用户 + 扩展负责
         platforms_need_prefetch = ["instagram", "twitter", "x", "reddit"]
         
         # 预请求：模拟用户点击视频链接
@@ -2064,64 +1970,92 @@ class DownloadThread(QThread):
             except Exception as e:
                 self.log(f"[{platform.upper()}] 预请求失败（忽略）: {e}")
 
-        # 网络重试循环
-        for net_attempt in range(self.NETWORK_MAX_RETRIES + 1):
-            if self.stop_flag or self.skip_flag:
-                return False
+        result = "FAILED"
+        final_class = None
+        attempts = 0
 
-            # 网络重试时清理残留文件，确保 yt-dlp 从头开始
-            if net_attempt > 0:
-                delay = self.NETWORK_RETRY_DELAYS[min(net_attempt - 1, len(self.NETWORK_RETRY_DELAYS) - 1)]
-                self.log(f"")
-                self.log(f"[网络重试 {net_attempt}/{self.NETWORK_MAX_RETRIES}] 等待 {delay} 秒后重试...")
-                time.sleep(delay)
-                self._cleanup_job_dir(job_dir)
-                # 重新获取 cookie（可能已刷新）
-                cookie_args = self.get_cookie_args(url)
-
-            cmd = self.build_ytdlp_args(url, job_dir, ua, cookie_args, player_client=None)
-
-            self.log("")
-            if net_attempt == 0:
-                self.log("开始下载：")
-            else:
-                self.log(f"网络重试下载（第 {net_attempt} 次）：")
-            
-            # 调试：显示 URL 编码信息
-            import urllib.parse
-            parsed = urllib.parse.urlparse(url)
-            self.log(f"[DEBUG] URL: {url}")
-            self.log(f"[DEBUG] 用户名: {parsed.path.split('/')[1] if '/' in parsed.path else 'N/A'}")
-            self.log(f"[DEBUG] URL 长度: {len(url)}")
-            self.log(url)
-
-            ok, output_text = self._run_ytdlp(cmd)
-
-            if ok:
-                return True
-
-            if self.stop_flag or self.skip_flag:
-                return False
-
-            # 分析错误原因
-            stderr_text = output_text.lower()
-
-            # 判断是否可重试的网络错误
-            if self._is_network_error(stderr_text):
-                if net_attempt < self.NETWORK_MAX_RETRIES:
-                    self.log(f"[网络] 下载失败（疑似网络波动），将自动重试")
-                    continue  # 继续下一次网络重试
-                else:
-                    self.log(f"[网络] 已重试 {self.NETWORK_MAX_RETRIES} 次仍然失败")
+        try:
+            # 网络重试循环（原版）
+            for net_attempt in range(self.NETWORK_MAX_RETRIES + 1):
+                if self.stop_flag or self.skip_flag:
+                    result = "ABORTED"
                     return False
 
-            # 其他错误（不可重试）直接返回
-            return False
+                # 网络重试时清理残留文件，确保 yt-dlp 从头开始
+                if net_attempt > 0:
+                    delay = self.NETWORK_RETRY_DELAYS[min(net_attempt - 1, len(self.NETWORK_RETRY_DELAYS) - 1)]
+                    self.log(f"")
+                    self.log(f"[网络重试 {net_attempt}/{self.NETWORK_MAX_RETRIES}] 等待 {delay} 秒后重试...")
+                    time.sleep(delay)
+                    self._cleanup_job_dir(job_dir)
+                    # 重新获取 cookie（可能已刷新）
+                    cookie_args = self.get_cookie_args(url)
 
-        return False
+                attempts = net_attempt + 1
+                self._task_log_request(task_id, cookie_args, ua, referer, attempts, None)
+
+                cmd = self.build_ytdlp_args(url, job_dir, ua, cookie_args,
+                                            player_client=None, referer=referer)
+
+                self.log("")
+                if net_attempt == 0:
+                    self.log("开始下载：")
+                else:
+                    self.log(f"网络重试下载（第 {net_attempt} 次）：")
+                
+                # 调试：显示 URL 编码信息
+                import urllib.parse
+                parsed = urllib.parse.urlparse(url)
+                self.log(f"[DEBUG] URL: {url}")
+                self.log(f"[DEBUG] 用户名: {parsed.path.split('/')[1] if '/' in parsed.path else 'N/A'}")
+                self.log(f"[DEBUG] URL 长度: {len(url)}")
+                self.log(url)
+
+                ok, output_text = self._run_ytdlp(cmd)
+
+                if ok:
+                    result = "SUCCESS"
+                    return True
+
+                if self.stop_flag or self.skip_flag:
+                    result = "ABORTED"
+                    return False
+
+                # 分析错误原因
+                stderr_text = output_text.lower()
+
+                # 判断是否可重试的网络错误（原版）
+                if self._is_network_error(stderr_text):
+                    if net_attempt < self.NETWORK_MAX_RETRIES:
+                        self.log(f"[网络] 下载失败（疑似网络波动），将自动重试")
+                        continue  # 继续下一次网络重试
+                    else:
+                        self.log(f"[网络] 已重试 {self.NETWORK_MAX_RETRIES} 次仍然失败")
+                        final_class = "YTDLP"
+                        return False
+
+                # 不猜测错误原因：记录 yt-dlp 真实错误，
+                # 只有明确的认证/登录/Cookie 提示才标 AUTH / COOKIE
+                final_class = self._classify_error(output_text)
+                error_message = self._first_error_message(output_text)
+                task_debug_section("ERROR", [
+                    ("task_id", task_id),
+                    ("attempt", attempts),
+                    ("class", final_class),
+                    ("message", error_message),
+                ])
+                self.log(f"[ERROR] class={final_class}")
+                self.log(f"[ERROR] message={error_message}")
+
+                # 其他错误（不可重试）直接返回
+                return False
+
+            return False
+        finally:
+            self._task_log_end(task_id, result, attempts, task_start, final_class)
 
     def _run_ytdlp(self, cmd):
-        """执行 yt-dlp 命令，实时输出日志与进度，返回 (是否成功, 完整输出文本)"""
+        """执行 yt-dlp 命令（原版内联循环原样提取），返回 (是否成功, 完整输出文本)"""
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -2133,7 +2067,7 @@ class DownloadThread(QThread):
             bufsize=1
         )
 
-        output_lines = []
+        stderr_output = []
 
         for line in iter(process.stdout.readline, ""):
             if self.stop_flag or self.skip_flag:
@@ -2141,11 +2075,11 @@ class DownloadThread(QThread):
                     process.terminate()
                 except Exception:
                     pass
-                return False, "\n".join(output_lines)
+                return False, "\n".join(stderr_output)
 
             line = line.rstrip()
             if line:
-                output_lines.append(line)
+                stderr_output.append(line)
                 self.log(line)
 
                 if "%" in line:
@@ -2157,472 +2091,191 @@ class DownloadThread(QThread):
                         pass
 
         process.wait()
-        return process.returncode == 0, "\n".join(output_lines)
+        return process.returncode == 0, "\n".join(stderr_output)
 
-    # ---- TikTok 错误分类 ----
-    # SESSION_ERROR：403 / 429 / Unexpected response / TikTok webpage 异常 → 重读扩展 Cookie/UA 后重试
-    # EXTRACTOR_ERROR：Unable to extract 系列 → 同样触发 Session 回退（按改造方案第七节）
-    # NETWORK_ERROR：timeout / connection reset / 502 / 503 / 504 → 同上下文降并发重试，不刷新 Cookie
-    # UNKNOWN_ERROR：记录完整日志，不盲目刷新 Cookie，直接失败
+    # ---- TikTok 并发降级：唯一保留的 TikTok 专用增强 ----
+    # -N 8 → 失败 → 等待 → -N 4 → 失败 → 结束。
+    # 不刷新 Cookie、不切换 UA/Referer、不管理代理、不连接浏览器。
+    TIKTOK_DOWNGRADE_DELAY = 5  # 并发降级重试前等待秒数
 
-    TIKTOK_SESSION_ERROR_INDICATORS = [
-        "http error 403",
-        "http error 429",
-        "unexpected response",
-        "tiktok webpage",
-    ]
+    def _download_tiktok(self, url, job_dir):
+        """TikTok 下载：-N 8 → -N 4 单次并发降级，最多 2 次尝试"""
+        task_id = secrets.token_hex(3).upper()
+        task_start = time.time()
+        self._task_log_start(task_id, url, "tiktok")
 
-    # 代理自身故障的特征（本机代理端口未监听 / 代理节点不可达），
-    # 命中时记录 [PROXY ERROR]，不笼统归为下载失败。
-    # 注意：必须同时出现代理地址与连接失败字样才算，避免把站点封禁误判为代理问题。
-    TIKTOK_PROXY_ERROR_INDICATORS = [
-        "proxy connection refused",
-        "cannot connect to proxy",
-        "unable to connect to proxy",
-        "connection to proxy failed",
-        "could not connect to proxy",
-        "failed to establish connection with proxy",
-        "tunnel connection failed",
-        "proxy returned error",
-    ]
+        # Cookie + UA + Referer 一次性读取，全程保持同一请求环境，重试不更换
+        ua = self.get_ua()
+        cookie_args = self.get_cookie_args(url)
+        referer = self.get_referer(url)
 
-    def _is_tiktok_proxy_error(self, output_text):
-        """判断失败输出是否为代理自身故障（代理端口不通 / 代理节点拒绝）"""
-        if not (TIKTOK_PROXY_ENABLED and TIKTOK_PROXY):
+        result = "FAILED"
+        final_class = None
+        attempts = 0
+
+        try:
+            for attempt, workers in ((1, 8), (2, 4)):
+                if self.stop_flag or self.skip_flag:
+                    result = "ABORTED"
+                    return False
+
+                attempts = attempt
+
+                if attempt == 2:
+                    self.log("")
+                    self.log(f"[TikTok] 并发降级（-N 8 → -N 4），等待 {self.TIKTOK_DOWNGRADE_DELAY} 秒后重试...")
+                    time.sleep(self.TIKTOK_DOWNGRADE_DELAY)
+                    self._cleanup_job_dir(job_dir)
+
+                self._task_log_request(task_id, cookie_args, ua, referer, attempt, workers)
+
+                cmd = self.build_ytdlp_args(
+                    url, job_dir, ua, cookie_args,
+                    referer=referer, concurrency=workers
+                )
+
+                self.log("")
+                if attempt == 1:
+                    self.log("开始下载：")
+                else:
+                    self.log(f"TikTok 并发降级下载（第 {attempt} 次，-N {workers}）：")
+                self.log(url)
+
+                ok, output_text = self._run_ytdlp(cmd)
+
+                if ok:
+                    result = "SUCCESS"
+                    return True
+
+                if self.stop_flag or self.skip_flag:
+                    result = "ABORTED"
+                    return False
+
+                # 不猜测错误原因：记录 yt-dlp 真实错误，
+                # 只有明确的认证/登录/Cookie 提示才标 AUTH / COOKIE
+                final_class = self._classify_error(output_text)
+                error_message = self._first_error_message(output_text)
+                task_debug_section("ERROR", [
+                    ("task_id", task_id),
+                    ("attempt", attempt),
+                    ("class", final_class),
+                    ("message", error_message),
+                ])
+                task_debug(
+                    "[YTDLP STDERR]",
+                    *output_text.splitlines()[-40:],
+                    ""
+                )
+                self.log(f"[ERROR] class={final_class}")
+                self.log(f"[ERROR] message={error_message}")
+
+                if attempt == 2:
+                    self.log("")
+                    self.log("[TikTok] ⚠ 并发降级（-N 4）后仍失败，结束任务")
+                    self.log("[TikTok] 建议：在浏览器中打开 TikTok 页面，等扩展同步最新 Cookie 后，右键失败链接 → 重试")
+                    return False
+
             return False
-        text = output_text.lower()
-        if not any(ind in text for ind in self.TIKTOK_PROXY_ERROR_INDICATORS):
-            return False
-        # 进一步确认输出中确实引用了本机代理（端口或主机），降低误判
-        ptype, phost, pport = tiktok_parse_proxy(TIKTOK_PROXY)
-        return phost in text or pport in text
+        finally:
+            self._task_log_end(task_id, result, attempts, task_start, final_class)
 
-    TIKTOK_EXTRACTOR_ERROR_INDICATORS = [
-        "unable to extract universal data",
-        "unable to extract",
+    # ---- 错误分类（简化版） ----
+    # 只有 yt-dlp 明确返回认证/登录/Cookie 相关错误时才标 AUTH / COOKIE，
+    # 其余一律记录真实错误为 YTDLP，不猜测。
+    AUTH_ERROR_INDICATORS = [
+        "login required",
+        "sign in to confirm",
+        "please sign in",
+        "authentication required",
+        "only available for registered",
+        "premium members",
     ]
 
-    def _classify_tiktok_error(self, output_text):
-        """TikTok 失败输出分类：SESSION / EXTRACTOR / NETWORK / UNKNOWN"""
+    COOKIE_ERROR_INDICATORS = [
+        "cookies file",
+        "cookie file",
+        "unable to read cookie",
+        "invalid cookie",
+    ]
+
+    def _classify_error(self, output_text):
+        """错误分类：COOKIE / AUTH / YTDLP（不猜测）"""
         text = output_text.lower()
-        # Session 类优先判断（429 在 TikTok 场景属于 Session 而非普通网络错误）
-        if any(ind in text for ind in self.TIKTOK_SESSION_ERROR_INDICATORS):
-            return "SESSION_ERROR"
-        if any(ind in text for ind in self.TIKTOK_EXTRACTOR_ERROR_INDICATORS):
-            return "EXTRACTOR_ERROR"
-        if self._is_network_error(text):
-            return "NETWORK_ERROR"
-        return "UNKNOWN_ERROR"
+        if any(ind in text for ind in self.COOKIE_ERROR_INDICATORS):
+            return "COOKIE"
+        if any(ind in text for ind in self.AUTH_ERROR_INDICATORS):
+            return "AUTH"
+        return "YTDLP"
 
-    # ---- TikTok 调试日志辅助（只写 logs/tiktok_debug.log，不影响 GUI 日志） ----
-
-    def _tiktok_cookie_snapshot(self):
-        """当前生效的 TikTok Cookie 文件快照：(mtime, size)，不存在返回 (None, 0)"""
-        for d in ("tiktok.com", "tiktokcdn.com"):
-            p = self.cookies_dir / d / "_default.txt"
-            if p.exists():
-                try:
-                    st = p.stat()
-                    return (
-                        time.strftime("%H:%M:%S", time.localtime(st.st_mtime)),
-                        st.st_size
-                    )
-                except Exception:
-                    return (None, 0)
-        return (None, 0)
-
-    def _tiktok_error_reason(self, output_text):
-        """从失败输出提取具体原因（供 [ERROR CLASSIFICATION] / [RETRY] 使用）"""
-        text = output_text.lower()
-        checks = [
-            ("http error 403", "HTTP_403"),
-            ("http error 429", "HTTP_429"),
-            ("http error 502", "HTTP_502"),
-            ("http error 503", "HTTP_503"),
-            ("http error 504", "HTTP_504"),
-            ("http error 401", "HTTP_401"),
-            ("unable to extract universal data", "UNABLE_TO_EXTRACT_UNIVERSAL_DATA"),
-            ("unable to extract", "UNABLE_TO_EXTRACT"),
-            ("unexpected response", "UNEXPECTED_RESPONSE"),
-            ("tiktok webpage", "WEBPAGE_REQUEST_FAILED"),
-            ("timed out", "TIMEOUT"),
-            ("timeout", "TIMEOUT"),
-            ("connection reset", "CONNECTION_RESET"),
-            ("connection aborted", "CONNECTION_ABORTED"),
-            ("connection refused", "CONNECTION_REFUSED"),
-            ("could not resolve", "DNS_FAILURE"),
-            ("ssl", "SSL_ERROR"),
-        ]
-        for needle, reason in checks:
-            if needle in text:
-                return reason
-        return "UNKNOWN"
-
-    def _tiktok_stage_from_output(self, output_text, ok):
-        """根据 yt-dlp 输出区分 Resolve / Download 阶段，返回 (resolve, download) 状态"""
-        if ok:
-            return "SUCCESS", "SUCCESS"
-        if "[download]" in output_text or "[Merger]" in output_text:
-            return "SUCCESS", "FAILED"
-        if "[info]" in output_text:
-            return "SUCCESS", "NOT_STARTED"
-        return "FAILED", "NOT_STARTED"
-
-    def _tiktok_short_error(self, output_text):
-        """提取首行 ERROR 信息（截断 300 字符）作为摘要"""
+    @staticmethod
+    def _first_error_message(output_text):
+        """提取最后一条 ERROR 行作为错误摘要（截断 300 字符）"""
         lines = [l.strip() for l in output_text.splitlines() if l.strip()]
         for line in reversed(lines):
             if line.upper().startswith("ERROR"):
                 return line[:300]
         return lines[-1][:300] if lines else "NA"
 
-    def _tiktok_log_task_start(self, task_id, url, ctx):
-        """写入任务开始块：环境 / Cookie（脱敏） / UA / Referer"""
-        tiktok_debug_section("TIKTOK TASK START", [
-            ("time", time.strftime("%Y-%m-%d %H:%M:%S")),
-            ("task_id", task_id),
-            ("url", tiktok_redact_url(url)),
-        ], bordered=True)
+    # ---- 任务日志辅助（只写 logs/tiktok_debug.log，不影响 GUI 日志） ----
 
-        tiktok_debug_section("ENVIRONMENT", [
-            ("platform", "tiktok"),
-            ("yt_dlp_path", str(YTDLP_EXE)),
-            ("yt_dlp_version", get_ytdlp_version()),
+    def _task_log_start(self, task_id, url, platform):
+        """[TASK START] + [ENVIRONMENT]（全平台通用）"""
+        import shutil
+        task_debug_section("TASK START", [
+            ("task_id", task_id),
+            ("platform", platform),
+            ("url", task_redact_url(url)),
+            ("start_time", time.strftime("%Y-%m-%d %H:%M:%S")),
+        ], bordered=True)
+        node_path = shutil.which("node") or ""
+        if not node_path and (RUN_DIR / "nodejs" / "node.exe").exists():
+            node_path = str(RUN_DIR / "nodejs" / "node.exe")
+        task_debug_section("ENVIRONMENT", [
             ("python_version", sys.version.split()[0]),
             ("os", "Windows" if sys.platform == "win32" else sys.platform),
+            ("yt_dlp_path", str(YTDLP_EXE)),
+            ("yt_dlp_version", get_ytdlp_version()),
+            ("node_path", node_path or "NA"),
+            ("ffmpeg_path", str(FFMPEG_EXE)),
         ])
 
-        # Cookie：只记录存在性 / 大小 / 数量 / mtime，绝不记录真实值
-        cookie_path = None
-        if ctx["cookie_args"]:
-            cookie_path = Path(ctx["cookie_args"][1])
-        stats_path = cookie_path or (self.cookies_dir / "tiktok.com" / "_default.txt")
-        stats = tiktok_cookie_stats(stats_path)
-        if cookie_path is None:
-            source = "none"
-        elif str(cookie_path).startswith(str(self.cookies_dir)):
-            source = "extension"
+    def _task_log_request(self, task_id, cookie_args, ua, referer, attempt, concurrency):
+        """[REQUEST] + [ATTEMPT]：Cookie 只记存在性/条数/关键项存在性，不记真实值"""
+        cookie_path = cookie_args[1] if cookie_args else None
+        if cookie_path:
+            stats = task_cookie_stats(cookie_path)
         else:
-            source = "local"
-        pairs = [
-            ("cookie_source", source),
-            ("cookie_file", str(cookie_path) if cookie_path else "NA"),
-            ("cookie_exists", str(stats["exists"]).lower()),
-            ("cookie_size", stats["size"]),
-            ("cookie_count", stats["count"]),
-            ("cookie_mtime", stats["mtime"]),
-        ]
-        for name in TIKTOK_KEY_COOKIES:
-            pairs.append((name, stats[name]))
-        tiktok_debug_section("COOKIE", pairs)
-
-        ua = ctx["ua"] or ""
-        tiktok_debug_section("UA", [
-            ("ua_source", "extension" if check_file(UA_FILE) else "default"),
-            ("ua_exists", "true" if ua else "false"),
-            ("ua_length", len(ua)),
-            ("ua", ua[:160]),
-        ])
-
-        referer = ctx["referer"] or ""
-        referer_source = "default"
-        try:
-            root = CookieManager.root_domain_of(
-                CookieManager._extract_host(url)
-            )
-            if root and (self.cookies_dir / root / "_referer.txt").exists():
-                referer_source = "extension"
-        except Exception:
-            pass
-        tiktok_debug_section("REFERER", [
-            ("referer", referer or "NA"),
-            ("referer_source", referer_source),
-        ])
-
-        # 代理：所有 Retry 使用同一个代理，不切换（含敏感信息时只记录主机/端口，无密码字段）
-        if TIKTOK_PROXY_ENABLED and TIKTOK_PROXY:
-            ptype, phost, pport = tiktok_parse_proxy(TIKTOK_PROXY)
-            tiktok_debug_section("TIKTOK PROXY", [
-                ("enabled", "true"),
-                ("configured_proxy", TIKTOK_PROXY),
-                ("proxy_type", ptype),
-                ("host", phost),
-                ("port", pport),
-            ])
-        else:
-            tiktok_debug_section("TIKTOK PROXY", [
-                ("enabled", "false"),
-                ("configured_proxy", "NA"),
-            ])
-
-    def _tiktok_log_task_end(self, task_id, result, state, final_strategy, task_start):
-        """写入任务总结块"""
+            stats = {"exists": False, "size": 0, "count": 0, "mtime": "NA"}
+            for name in TASK_KEY_COOKIES:
+                stats[name] = "absent"
         pairs = [
             ("task_id", task_id),
-            ("result", result),
-            ("attempts", state["attempts"]),
-            ("first_strategy", state["first_strategy"] or "NA"),
-            ("final_strategy", final_strategy or state["final_strategy"] or "NA"),
-            ("resolve", state["resolve"]),
-            ("download", state["download"]),
-            ("cookie_changed", str(state["cookie_changed"]).lower()),
+            ("cookie", "true" if cookie_args else "false"),
+            ("ua", "true" if ua else "false"),
+            ("referer", "true" if referer else "false"),
+            ("concurrency", concurrency if concurrency is not None else "NA"),
+            ("cookie_exists", str(stats["exists"]).lower()),
+            ("cookie_count", stats["count"]),
+            ("cookie_header", "REDACTED" if cookie_args else "NA"),
         ]
-        if state["final_error_class"]:
-            pairs.append(("final_error_class", state["final_error_class"]))
-        if state["final_error"]:
-            pairs.append(("final_error", state["final_error"]))
-        pairs.append(("total_time", f"{time.time() - task_start:.1f}s"))
-        tiktok_debug_section("TIKTOK TASK END", pairs, bordered=True)
+        for name in TASK_KEY_COOKIES:
+            pairs.append((name, stats.get(name, "absent")))
+        task_debug_section("REQUEST", pairs)
+        task_debug_section("ATTEMPT", [
+            ("task_id", task_id),
+            ("attempt", attempt),
+            ("concurrency", concurrency if concurrency is not None else "NA"),
+        ], bordered=True)
 
-    def _download_tiktok(self, url, job_dir):
-        """TikTok 三级下载策略（最多 TIKTOK_MAX_RETRIES 次，不无限重试）
-
-        Attempt 1：扩展 Cookie + UA + Referer，-N 8
-        Attempt 2：网络错误 → 相同上下文，-N 4（不刷新 Cookie）
-        Attempt 3：Session 错误 → 重新读取扩展 Cookie/UA/Referer 重构参数，-N 4
-        Attempt 4：再次重读 Cookie，-N 2
-        全程不连接 Chrome / CDP，只消费扩展同步的文件。
-        每一步都写入 logs/tiktok_debug.log（TIKTOK_DEBUG_LOG 控制开关）。
-        """
-        task_id = secrets.token_hex(3).upper()
-        task_start = time.time()
-
-        ctx = self._build_tiktok_context(url)
-        self._tiktok_log_task_start(task_id, url, ctx)
-
-        state = {
-            "attempts": 0,
-            "first_strategy": None,
-            "final_strategy": None,
-            "resolve": "NOT_STARTED",
-            "download": "NOT_STARTED",
-            "cookie_changed": False,
-            "final_error_class": None,
-            "final_error": None,
-        }
-
-        last_kind = None
-        strategy = "DIRECT"
-        # 上一次尝试实际使用的 Cookie 快照（用于判断刷新前后 Cookie 是否真的变化）
-        last_snapshot = self._tiktok_cookie_snapshot()
-
-        for attempt in range(1, TIKTOK_MAX_RETRIES + 1):
-            if self.stop_flag or self.skip_flag:
-                self._tiktok_log_task_end(task_id, "ABORTED", state, strategy, task_start)
-                return False
-
-            if attempt > 1:
-                delay = TIKTOK_RETRY_DELAYS[min(attempt - 2, len(TIKTOK_RETRY_DELAYS) - 1)]
-                self.log("")
-                self.log(f"[TikTok 重试 {attempt - 1}/{TIKTOK_MAX_RETRIES - 1}] 等待 {delay} 秒后重试...")
-                time.sleep(delay)
-                self._cleanup_job_dir(job_dir)
-
-                # Session 回退：重新读取扩展最新 Cookie/UA/Referer，重构请求上下文；
-                # 网络错误则保持原上下文不变（不刷新 Cookie）
-                if last_kind in ("SESSION_ERROR", "EXTRACTOR_ERROR"):
-                    strategy = "EXTENSION_COOKIE_REFRESH"
-                    # 对比：失败尝试使用的 Cookie 与刷新后重新读到的 Cookie（诊断关键）
-                    before = last_snapshot
-                    ctx = self._build_tiktok_context(url, force_reload=True)
-                    after = self._tiktok_cookie_snapshot()
-                    changed = before != after
-                    state["cookie_changed"] = state["cookie_changed"] or changed
-                    tiktok_debug_section("COOKIE REFRESH", [
-                        ("cookie_mtime_before", before[0] or "NA"),
-                        ("cookie_size_before", before[1]),
-                        ("cookie_mtime_after", after[0] or "NA"),
-                        ("cookie_size_after", after[1]),
-                        ("cookie_changed", str(changed).lower()),
-                    ])
-                else:
-                    strategy = "NETWORK_RETRY"
-
-            state["attempts"] = attempt
-            if state["first_strategy"] is None:
-                state["first_strategy"] = strategy
-            state["final_strategy"] = strategy
-
-            concurrency = TIKTOK_CONCURRENCY_STAGES[min(attempt - 1, len(TIKTOK_CONCURRENCY_STAGES) - 1)]
-
-            # 本次尝试实际使用的 Cookie 快照（下次 Session 刷新时用作 before）
-            last_snapshot = self._tiktok_cookie_snapshot()
-
-            cmd = self.build_ytdlp_args(
-                url,
-                job_dir,
-                ctx["ua"],
-                ctx["cookie_args"],
-                referer=ctx["referer"],
-                concurrency=concurrency
-            )
-
-            self.log("")
-            if attempt == 1:
-                self.log("开始下载：")
-            else:
-                self.log(f"TikTok 重试下载（第 {attempt} 次，上次错误：{last_kind}，-N {concurrency}）：")
-            self.log(url)
-
-            # 调试日志：本次尝试的策略（命令中的 Cookie/UA 真实值不落盘）
-            # Proxy 字段如实记录：明确传给 yt-dlp 的代理（不依赖系统代理 / TUN）
-            ytdlp_attempt_pairs = [
-                ("attempt", attempt),
-                ("max_attempts", TIKTOK_MAX_RETRIES),
-                ("cookie", "true" if ctx["cookie_args"] else "false"),
-                ("ua", "true" if ctx["ua"] else "false"),
-                ("referer", "true" if ctx["referer"] else "false"),
-                ("concurrency", concurrency),
-                ("strategy", strategy),
-            ]
-            if ctx.get("proxy"):
-                ptype, phost, pport = tiktok_parse_proxy(ctx["proxy"])
-                ytdlp_attempt_pairs.extend([
-                    ("proxy", "USED"),
-                    ("proxy_type", ptype),
-                    ("proxy_host", phost),
-                    ("proxy_port", pport),
-                ])
-            else:
-                ytdlp_attempt_pairs.append(("proxy", "DISABLED"))
-            tiktok_debug_section("YTDLP ATTEMPT", ytdlp_attempt_pairs, bordered=True)
-            ytdlp_cmd_pairs = [
-                ("cookies", "true" if ctx["cookie_args"] else "false"),
-                ("user_agent", "true"),
-                ("cookie_header", "REDACTED"),
-                ("referer", ctx["referer"] or "NA"),
-                ("concurrency", concurrency),
-            ]
-            if ctx.get("proxy"):
-                ytdlp_cmd_pairs.append(("proxy", ctx["proxy"]))
-            else:
-                ytdlp_cmd_pairs.append(("proxy", "NONE"))
-            tiktok_debug_section("YTDLP CMD", ytdlp_cmd_pairs)
-
-            tiktok_debug_section("RESOLVE", [("status", "START")])
-
-            ok, output_text = self._run_ytdlp(cmd)
-
-            if ok:
-                source = self.find_source_file(job_dir)
-                filesize = -1
-                if source is not None:
-                    try:
-                        filesize = source.stat().st_size
-                    except Exception:
-                        pass
-                state["resolve"] = "SUCCESS"
-                state["download"] = "SUCCESS"
-                tiktok_debug_section("RESOLVE", [("status", "SUCCESS")])
-                tiktok_debug_section("DOWNLOAD", [
-                    ("status", "SUCCESS"),
-                    ("filesize", filesize),
-                ])
-                self._tiktok_log_task_end(task_id, "SUCCESS", state, strategy, task_start)
-                return True
-
-            if self.stop_flag or self.skip_flag:
-                self._tiktok_log_task_end(task_id, "ABORTED", state, strategy, task_start)
-                return False
-
-            # 代理自身故障必须最先识别：代理不通时刷 Cookie / 降并发都没有意义，
-            # 且不能笼统记录为普通下载失败。
-            if self._is_tiktok_proxy_error(output_text):
-                ptype, phost, pport = tiktok_parse_proxy(TIKTOK_PROXY)
-                reason = self._tiktok_error_reason(output_text)
-                tiktok_debug_section("PROXY ERROR", [
-                    ("configured_proxy", TIKTOK_PROXY),
-                    ("proxy_type", ptype),
-                    ("host", phost),
-                    ("port", pport),
-                    ("reason", reason),
-                    ("error", self._tiktok_short_error(output_text)),
-                    ("hint", "v2rayN 未运行 / 端口不是 10808 / 代理节点不可达"),
-                ])
-                self.log(f"[TikTok] ⚠ 代理连接失败（{TIKTOK_PROXY}）：请确认 v2rayN 正在运行且混合端口为 10808")
-                self.log("[TikTok] 代理不通时继续重试没有意义，终止本任务")
-                tiktok_debug(
-                    "[YTDLP STDERR]",
-                    *output_text.splitlines()[-40:],
-                    ""
-                )
-                state["final_error_class"] = "PROXY"
-                state["final_error"] = f"Proxy connection failed ({TIKTOK_PROXY})"
-                self._tiktok_log_task_end(task_id, "FAILED", state, strategy, task_start)
-                return False
-            
-            last_kind = self._classify_tiktok_error(output_text)
-            error_class = last_kind.split("_")[0]  # SESSION / EXTRACTOR / NETWORK / UNKNOWN
-            reason = self._tiktok_error_reason(output_text)
-            short_error = self._tiktok_short_error(output_text)
-
-            resolve_status, download_status = self._tiktok_stage_from_output(output_text, ok)
-            state["resolve"] = resolve_status
-            state["download"] = download_status
-            state["final_error_class"] = error_class
-            state["final_error"] = short_error
-
-            # 严格区分 Resolve 失败与 Download 失败（两个阶段都必须留下记录）
-            if resolve_status == "FAILED":
-                tiktok_debug_section("RESOLVE", [
-                    ("status", "FAILED"),
-                    ("error_class", error_class),
-                    ("error", short_error),
-                ])
-                tiktok_debug_section("DOWNLOAD", [("status", "NOT_STARTED")])
-            else:
-                tiktok_debug_section("RESOLVE", [("status", "SUCCESS")])
-                tiktok_debug_section("DOWNLOAD", [
-                    ("status", download_status),
-                    ("error_class", error_class),
-                    ("error", short_error),
-                ])
-
-            # 失败必须落最后 40 行输出（真正有价值的诊断信息）
-            tiktok_debug(
-                "[YTDLP STDERR]",
-                *output_text.splitlines()[-40:],
-                ""
-            )
-
-            tiktok_debug_section("ERROR CLASSIFICATION", [
-                ("class", error_class),
-                ("reason", reason),
-            ])
-
-            if attempt >= TIKTOK_MAX_RETRIES:
-                break
-
-            if last_kind == "NETWORK_ERROR":
-                self.log("[TikTok] 疑似网络波动（保持 Cookie/UA 不变，降低并发重试）")
-            elif last_kind in ("SESSION_ERROR", "EXTRACTOR_ERROR"):
-                self.log("[TikTok] 疑似 Session/Cookie 失效，将重新读取扩展同步的 Cookie/UA 后重试")
-            else:
-                # UNKNOWN_ERROR：记录完整日志，不盲目刷新 Cookie，直接失败
-                self.log("[TikTok] 未知错误，不盲目刷新 Cookie，终止重试")
-                self.log("--- 错误输出（末尾 20 行） ---")
-                for line in output_text.splitlines()[-20:]:
-                    self.log(line)
-                self._tiktok_log_task_end(task_id, "FAILED", state, strategy, task_start)
-                return False
-
-            # 记录重试原因与下一次策略
-            next_strategy = (
-                "EXTENSION_COOKIE_REFRESH"
-                if last_kind in ("SESSION_ERROR", "EXTRACTOR_ERROR")
-                else "NETWORK_RETRY"
-            )
-            tiktok_debug_section("RETRY", [
-                ("attempt", attempt + 1),
-                ("reason", reason),
-                ("strategy", next_strategy),
-            ])
-
-        self.log("")
-        self.log(f"[TikTok] ⚠ 已尝试 {TIKTOK_MAX_RETRIES} 次仍然失败（最后一次：{last_kind}）")
-        self.log("[TikTok] 建议：在浏览器中打开并刷新 TikTok 页面，等扩展同步最新 Cookie 后，右键重试该链接")
-        self._tiktok_log_task_end(task_id, "FAILED", state, state["final_strategy"], task_start)
-        return False
+    def _task_log_end(self, task_id, result, attempts, task_start, final_class):
+        """[TASK END]"""
+        task_debug_section("TASK END", [
+            ("task_id", task_id),
+            ("result", result),
+            ("attempts", attempts),
+            ("elapsed", f"{time.time() - task_start:.1f}s"),
+            ("final_error_class", final_class or "NA"),
+        ], bordered=True)
 
     def find_source_file(
         self,
@@ -5417,6 +5070,27 @@ class MainWindow(QMainWindow):
             f"运行目录：{RUN_DIR}"
         )
 
+        # 启动环境检查（依赖缺失 / yt-dlp 过旧可第一时间发现）
+        env_rows = check_environment()
+        self.log("")
+        self.log("=" * 30)
+        self.log("ENVIRONMENT CHECK")
+        self.log("=" * 30)
+        for name, status in env_rows:
+            self.log(f"{name:<10}: {status}")
+        self.log("=" * 30)
+        self.log("")
+
+        # [YT-DLP] 路径与版本：出现解析异常时可立即判断 yt-dlp 是否过旧
+        ytdlp_version = get_ytdlp_version()
+        self.log(f"[YT-DLP] path={YTDLP_EXE}")
+        self.log(f"[YT-DLP] version={ytdlp_version}")
+        task_debug_section("YT-DLP", [
+            ("path", str(YTDLP_EXE)),
+            ("version", ytdlp_version),
+        ])
+        task_debug_section("ENVIRONMENT CHECK", env_rows)
+
         self.log(
             f"yt-dlp："
             f"{'正常' if check_file(YTDLP_EXE) else '未找到'}"
@@ -6341,9 +6015,6 @@ def apply_application_style(
 def main():
 
     ensure_dirs()
-
-    # 启动时清空 TikTok 调试日志：只保留本轮运行的诊断信息，方便上传 GitHub 分析
-    init_tiktok_debug_log()
 
     app = QApplication(
         sys.argv
