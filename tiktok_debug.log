@@ -1,0 +1,2109 @@
+# TikTok debug log（已脱敏，可安全上传 GitHub）
+# session_start=2026-08-22 10:17:38
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:17:52
+task_id=68F606
+url=https://www.tiktok.com/@decayingpeach/video/7551150132595526920
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=4915
+cookie_count=35
+cookie_mtime=2026-08-22 10:17:51
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7551150132595526920: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@decayingpeach/video/7551150132595526920
+[TikTok] 7551150132595526920: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7551150132595526920: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7551150132595526920: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+[RETRY]
+attempt=2
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:17:51
+cookie_size_before=4915
+cookie_mtime_after=10:18:06
+cookie_size_after=5046
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=2
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7551150132595526920: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@decayingpeach/video/7551150132595526920
+[TikTok] 7551150132595526920: Downloading webpage
+ERROR: [TikTok] 7551150132595526920: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=UNEXPECTED_RESPONSE
+
+[RETRY]
+attempt=3
+reason=UNEXPECTED_RESPONSE
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:18:06
+cookie_size_before=5046
+cookie_mtime_after=10:18:17
+cookie_size_after=5045
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=3
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7551150132595526920: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@decayingpeach/video/7551150132595526920
+[TikTok] 7551150132595526920: Downloading webpage
+ERROR: [TikTok] 7551150132595526920: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=UNEXPECTED_RESPONSE
+
+[RETRY]
+attempt=4
+reason=UNEXPECTED_RESPONSE
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:18:17
+cookie_size_before=5045
+cookie_mtime_after=10:18:36
+cookie_size_after=4915
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=4
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=2
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=2
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7551150132595526920: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@decayingpeach/video/7551150132595526920
+[TikTok] 7551150132595526920: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7551150132595526920: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7551150132595526920: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+============================================================
+[TIKTOK TASK END]
+task_id=68F606
+result=FAILED
+attempts=4
+first_strategy=DIRECT
+final_strategy=EXTENSION_COOKIE_REFRESH
+resolve=FAILED
+download=NOT_STARTED
+cookie_changed=true
+final_error_class=EXTRACTOR
+final_error=ERROR: [TikTok] 7551150132595526920: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+total_time=62.1s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:18:59
+task_id=E93DE3
+url=https://v16-webapp-prime.tiktok.com/video/tos/alisg/tos-alisg-ve-37c799-sg/ooUHceMcXyqZn5ehejohACSIUVlAikA8AQuTHQ/?a=1988%5Cu0026bti%3DODszNWYuMDE6%5Cu0026%5Cu0026bt%3D812%5Cu0026ft%3DytpHh9DfxxOusd.fb9tm8lcLVWOuRx_HFKKyS7R8ME_vz.z7T%5Cu0026mime_type%3Dvideo_mp4%5Cu0026rc%3DN2doNjRnaGdmaTk8O2lmNkBpM29sO3Q5cjZxNDMzZzczNEBgYzA2NmAvXl4xLTYuLl8vYSNeaGdpMmQ0NDRhLS1kMS9zcw%3D%3D%5Cu0026expire%3D1787537966%5Cu0026l%3D20260822101821F8336312C9A4B7524159%5Cu0026ply_type%3D2%5Cu0026policy%3D2%5Cu0026signature%3D723a81d7b74d8c29b1e061801872bc85%5Cu0026tk%3Dtt_chain_token%5Cu0026btag%3De00090000
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=4915
+cookie_count=35
+cookie_mtime=2026-08-22 10:18:59
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+============================================================
+[TIKTOK TASK END]
+task_id=E93DE3
+result=ABORTED
+attempts=1
+first_strategy=DIRECT
+final_strategy=DIRECT
+resolve=NOT_STARTED
+download=NOT_STARTED
+cookie_changed=false
+total_time=4.5s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:19:23
+task_id=8E36F5
+url=https://www.tiktok.com/@mark.ohh7/video/7516353547793861931
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=4884
+cookie_count=35
+cookie_mtime=2026-08-22 10:19:23
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=SUCCESS
+
+[DOWNLOAD]
+status=SUCCESS
+filesize=5374084
+
+============================================================
+[TIKTOK TASK END]
+task_id=8E36F5
+result=SUCCESS
+attempts=1
+first_strategy=DIRECT
+final_strategy=DIRECT
+resolve=SUCCESS
+download=SUCCESS
+cookie_changed=false
+total_time=13.9s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:19:59
+task_id=EE0AEC
+url=https://www.tiktok.com/@dannydorito23/video/7492165244203126059
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=4884
+cookie_count=35
+cookie_mtime=2026-08-22 10:19:59
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7492165244203126059: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@dannydorito23/video/7492165244203126059
+[TikTok] 7492165244203126059: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7492165244203126059: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7492165244203126059: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+[RETRY]
+attempt=2
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:19:59
+cookie_size_before=4884
+cookie_mtime_after=10:20:08
+cookie_size_after=5014
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=2
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7492165244203126059: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@dannydorito23/video/7492165244203126059
+[TikTok] 7492165244203126059: Downloading webpage
+ERROR: [TikTok] 7492165244203126059: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=UNEXPECTED_RESPONSE
+
+[RETRY]
+attempt=3
+reason=UNEXPECTED_RESPONSE
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:20:08
+cookie_size_before=5014
+cookie_mtime_after=10:20:28
+cookie_size_after=4884
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=3
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7492165244203126059: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@dannydorito23/video/7492165244203126059
+[TikTok] 7492165244203126059: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7492165244203126059: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7492165244203126059: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+[RETRY]
+attempt=4
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:20:28
+cookie_size_before=4884
+cookie_mtime_after=10:20:44
+cookie_size_after=4884
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=4
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=2
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=2
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7492165244203126059: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@dannydorito23/video/7492165244203126059
+[TikTok] 7492165244203126059: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7492165244203126059: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7492165244203126059: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+============================================================
+[TIKTOK TASK END]
+task_id=EE0AEC
+result=FAILED
+attempts=4
+first_strategy=DIRECT
+final_strategy=EXTENSION_COOKIE_REFRESH
+resolve=FAILED
+download=NOT_STARTED
+cookie_changed=true
+final_error_class=EXTRACTOR
+final_error=ERROR: [TikTok] 7492165244203126059: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+total_time=60.4s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:21:01
+task_id=F4DBDE
+url=https://www.tiktok.com/@decayingpeach/video/7551150132595526920
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=5014
+cookie_count=36
+cookie_mtime=2026-08-22 10:20:59
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7551150132595526920: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@decayingpeach/video/7551150132595526920
+[TikTok] 7551150132595526920: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7551150132595526920: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7551150132595526920: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+[RETRY]
+attempt=2
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:20:59
+cookie_size_before=5014
+cookie_mtime_after=10:21:09
+cookie_size_after=5322
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=2
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7551150132595526920: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@decayingpeach/video/7551150132595526920
+[TikTok] 7551150132595526920: Downloading webpage
+ERROR: [TikTok] 7551150132595526920: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=HTTP_403
+
+[RETRY]
+attempt=3
+reason=HTTP_403
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:21:09
+cookie_size_before=5322
+cookie_mtime_after=10:21:21
+cookie_size_after=5322
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=3
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7551150132595526920: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@decayingpeach/video/7551150132595526920
+[TikTok] 7551150132595526920: Downloading webpage
+ERROR: [TikTok] 7551150132595526920: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=HTTP_403
+
+[RETRY]
+attempt=4
+reason=HTTP_403
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:21:21
+cookie_size_before=5322
+cookie_mtime_after=10:21:46
+cookie_size_after=4884
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=4
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=2
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=2
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=SUCCESS
+
+[DOWNLOAD]
+status=SUCCESS
+filesize=1044249
+
+============================================================
+[TIKTOK TASK END]
+task_id=F4DBDE
+result=SUCCESS
+attempts=4
+first_strategy=DIRECT
+final_strategy=EXTENSION_COOKIE_REFRESH
+resolve=SUCCESS
+download=SUCCESS
+cookie_changed=true
+final_error_class=SESSION
+final_error=ERROR: [TikTok] 7551150132595526920: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+total_time=62.8s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:22:15
+task_id=675912
+url=https://www.tiktok.com/@susu4nnt/video/7532702331159235858
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=5014
+cookie_count=36
+cookie_mtime=2026-08-22 10:22:03
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=SUCCESS
+
+[DOWNLOAD]
+status=SUCCESS
+filesize=3544376
+
+============================================================
+[TIKTOK TASK END]
+task_id=675912
+result=SUCCESS
+attempts=1
+first_strategy=DIRECT
+final_strategy=DIRECT
+resolve=SUCCESS
+download=SUCCESS
+cookie_changed=false
+total_time=13.8s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:22:45
+task_id=6B13F5
+url=https://www.tiktok.com/@dannydorito23/video/7492165244203126059
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=5317
+cookie_count=37
+cookie_mtime=2026-08-22 10:22:28
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=SUCCESS
+
+[DOWNLOAD]
+status=SUCCESS
+filesize=4950667
+
+============================================================
+[TIKTOK TASK END]
+task_id=6B13F5
+result=SUCCESS
+attempts=1
+first_strategy=DIRECT
+final_strategy=DIRECT
+resolve=SUCCESS
+download=SUCCESS
+cookie_changed=false
+total_time=14.9s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:23:15
+task_id=27AFBC
+url=https://www.tiktok.com/@mark.ohh7/video/7515847588898426158
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=4884
+cookie_count=35
+cookie_mtime=2026-08-22 10:23:04
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7515847588898426158: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@mark.ohh7/video/7515847588898426158
+[TikTok] 7515847588898426158: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7515847588898426158: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7515847588898426158: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+[RETRY]
+attempt=2
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:23:04
+cookie_size_before=4884
+cookie_mtime_after=10:23:24
+cookie_size_after=5010
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=2
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7515847588898426158: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@mark.ohh7/video/7515847588898426158
+[TikTok] 7515847588898426158: Downloading webpage
+ERROR: [TikTok] 7515847588898426158: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=UNEXPECTED_RESPONSE
+
+[RETRY]
+attempt=3
+reason=UNEXPECTED_RESPONSE
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:23:24
+cookie_size_before=5010
+cookie_mtime_after=10:23:43
+cookie_size_after=4884
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=3
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7515847588898426158: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@mark.ohh7/video/7515847588898426158
+[TikTok] 7515847588898426158: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7515847588898426158: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7515847588898426158: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+[RETRY]
+attempt=4
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:23:43
+cookie_size_before=4884
+cookie_mtime_after=10:23:54
+cookie_size_after=5010
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=4
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=2
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=2
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7515847588898426158: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@mark.ohh7/video/7515847588898426158
+[TikTok] 7515847588898426158: Downloading webpage
+ERROR: [TikTok] 7515847588898426158: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=UNEXPECTED_RESPONSE
+
+============================================================
+[TIKTOK TASK END]
+task_id=27AFBC
+result=FAILED
+attempts=4
+first_strategy=DIRECT
+final_strategy=EXTENSION_COOKIE_REFRESH
+resolve=FAILED
+download=NOT_STARTED
+cookie_changed=true
+final_error_class=SESSION
+final_error=ERROR: [TikTok] 7515847588898426158: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+total_time=58.5s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:24:14
+task_id=A07903
+url=https://www.tiktok.com/@markohh2.0/video/7598340435962006797
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=5010
+cookie_count=36
+cookie_mtime=2026-08-22 10:24:13
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7598340435962006797: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@markohh2.0/video/7598340435962006797
+[TikTok] 7598340435962006797: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7598340435962006797: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7598340435962006797: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+[RETRY]
+attempt=2
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:24:13
+cookie_size_before=5010
+cookie_mtime_after=10:24:23
+cookie_size_after=5315
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=2
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7598340435962006797: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@markohh2.0/video/7598340435962006797
+[TikTok] 7598340435962006797: Downloading webpage
+ERROR: [TikTok] 7598340435962006797: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=HTTP_403
+
+[RETRY]
+attempt=3
+reason=HTTP_403
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:24:23
+cookie_size_before=5315
+cookie_mtime_after=10:24:35
+cookie_size_after=5315
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=3
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7598340435962006797: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@markohh2.0/video/7598340435962006797
+[TikTok] 7598340435962006797: Downloading webpage
+ERROR: [TikTok] 7598340435962006797: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=HTTP_403
+
+[RETRY]
+attempt=4
+reason=HTTP_403
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:24:35
+cookie_size_before=5315
+cookie_mtime_after=10:24:49
+cookie_size_after=5315
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=4
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=2
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=2
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7598340435962006797: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@markohh2.0/video/7598340435962006797
+[TikTok] 7598340435962006797: Downloading webpage
+ERROR: [TikTok] 7598340435962006797: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=HTTP_403
+
+============================================================
+[TIKTOK TASK END]
+task_id=A07903
+result=FAILED
+attempts=4
+first_strategy=DIRECT
+final_strategy=EXTENSION_COOKIE_REFRESH
+resolve=FAILED
+download=NOT_STARTED
+cookie_changed=true
+final_error_class=SESSION
+final_error=ERROR: [TikTok] 7598340435962006797: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+total_time=55.0s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:25:09
+task_id=FFE1DB
+url=https://www.tiktok.com/@maroi700/video/7496003996432338198
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=5315
+cookie_count=37
+cookie_mtime=2026-08-22 10:25:09
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=SUCCESS
+
+[DOWNLOAD]
+status=SUCCESS
+filesize=2736229
+
+============================================================
+[TIKTOK TASK END]
+task_id=FFE1DB
+result=SUCCESS
+attempts=1
+first_strategy=DIRECT
+final_strategy=DIRECT
+resolve=SUCCESS
+download=SUCCESS
+cookie_changed=false
+total_time=15.2s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:25:34
+task_id=9383B7
+url=https://www.tiktok.com/@donvibezfym/video/7514429944148020511
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=5618
+cookie_count=38
+cookie_mtime=2026-08-22 10:25:24
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7514429944148020511: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@donvibezfym/video/7514429944148020511
+[TikTok] 7514429944148020511: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7514429944148020511: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7514429944148020511: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+[RETRY]
+attempt=2
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:25:24
+cookie_size_before=5618
+cookie_mtime_after=10:25:43
+cookie_size_after=5012
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=2
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7514429944148020511: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@donvibezfym/video/7514429944148020511
+[TikTok] 7514429944148020511: Downloading webpage
+ERROR: [TikTok] 7514429944148020511: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=UNEXPECTED_RESPONSE
+
+[RETRY]
+attempt=3
+reason=UNEXPECTED_RESPONSE
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:25:43
+cookie_size_before=5012
+cookie_mtime_after=10:25:54
+cookie_size_after=5012
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=3
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=SUCCESS
+
+[DOWNLOAD]
+status=SUCCESS
+filesize=1425700
+
+============================================================
+[TIKTOK TASK END]
+task_id=9383B7
+result=SUCCESS
+attempts=3
+first_strategy=DIRECT
+final_strategy=EXTENSION_COOKIE_REFRESH
+resolve=SUCCESS
+download=SUCCESS
+cookie_changed=true
+final_error_class=SESSION
+final_error=ERROR: [TikTok] 7514429944148020511: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+total_time=44.4s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:26:29
+task_id=924408
+url=https://www.tiktok.com/@wwh_ali/video/7592276359624314134
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=5012
+cookie_count=36
+cookie_mtime=2026-08-22 10:26:18
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=EXTRACTOR
+error=ERROR: [TikTok] 7592276359624314134: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@wwh_ali/video/7592276359624314134
+[TikTok] 7592276359624314134: Downloading webpage
+[TikTok] Solving JS challenge using native Python implementation
+[TikTok] 7592276359624314134: Downloading webpage with challenge cookie
+ERROR: [TikTok] 7592276359624314134: Unable to extract universal data for rehydration; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=EXTRACTOR
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+
+[RETRY]
+attempt=2
+reason=UNABLE_TO_EXTRACT_UNIVERSAL_DATA
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:26:18
+cookie_size_before=5012
+cookie_mtime_after=10:26:37
+cookie_size_after=5314
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=2
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7592276359624314134: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@wwh_ali/video/7592276359624314134
+[TikTok] 7592276359624314134: Downloading webpage
+ERROR: [TikTok] 7592276359624314134: Unable to download webpage: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=HTTP_403
+
+[RETRY]
+attempt=3
+reason=HTTP_403
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:26:37
+cookie_size_before=5314
+cookie_mtime_after=10:26:49
+cookie_size_after=5314
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=3
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=4
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=4
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7592276359624314134: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@wwh_ali/video/7592276359624314134
+[TikTok] 7592276359624314134: Downloading webpage
+ERROR: [TikTok] 7592276359624314134: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=UNEXPECTED_RESPONSE
+
+[RETRY]
+attempt=4
+reason=UNEXPECTED_RESPONSE
+strategy=EXTENSION_COOKIE_REFRESH
+
+[COOKIE REFRESH]
+cookie_mtime_before=10:26:49
+cookie_size_before=5314
+cookie_mtime_after=10:27:05
+cookie_size_after=5314
+cookie_changed=true
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=4
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=2
+strategy=EXTENSION_COOKIE_REFRESH
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=2
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=FAILED
+error_class=SESSION
+error=ERROR: [TikTok] 7592276359624314134: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[DOWNLOAD]
+status=NOT_STARTED
+
+[YTDLP STDERR]
+[TikTok] Extracting URL: https://www.tiktok.com/@wwh_ali/video/7592276359624314134
+[TikTok] 7592276359624314134: Downloading webpage
+ERROR: [TikTok] 7592276359624314134: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+[ERROR CLASSIFICATION]
+class=SESSION
+reason=UNEXPECTED_RESPONSE
+
+============================================================
+[TIKTOK TASK END]
+task_id=924408
+result=FAILED
+attempts=4
+first_strategy=DIRECT
+final_strategy=EXTENSION_COOKIE_REFRESH
+resolve=FAILED
+download=NOT_STARTED
+cookie_changed=true
+final_error_class=SESSION
+final_error=ERROR: [TikTok] 7592276359624314134: Unexpected response from webpage request; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+total_time=53.8s
+============================================================
+
+============================================================
+[TIKTOK TASK START]
+time=2026-08-22 10:27:28
+task_id=298024
+url=https://www.tiktok.com/@mark.ohh7/video/7515847588898426158
+============================================================
+
+[ENVIRONMENT]
+platform=tiktok
+yt_dlp_path=C:\Users\Administrator\Desktop\下载\bin\yt-dlp.exe
+yt_dlp_version=2026.08.19
+python_version=3.11.9
+os=Windows
+
+[COOKIE]
+cookie_source=extension
+cookie_file=C:\Users\Administrator\Desktop\下载\cookies\tiktok.com\_default.txt
+cookie_exists=true
+cookie_size=5314
+cookie_count=37
+cookie_mtime=2026-08-22 10:27:23
+sessionid=present
+msToken=present
+sid_tt=present
+sid_guard=present
+passport_csrf_token=absent
+ttwid=present
+
+[UA]
+ua_source=extension
+ua_exists=true
+ua_length=111
+ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
+
+[REFERER]
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+referer_source=extension
+
+============================================================
+[YTDLP ATTEMPT]
+attempt=1
+max_attempts=4
+cookie=true
+ua=true
+referer=true
+concurrency=8
+strategy=DIRECT
+============================================================
+
+[YTDLP CMD]
+cookies=true
+user_agent=true
+cookie_header=REDACTED
+referer=https://www.tiktok.com/search?q=prediction%20filter&t=1787364236395
+concurrency=8
+
+[RESOLVE]
+status=START
+
+[RESOLVE]
+status=SUCCESS
+
+[DOWNLOAD]
+status=SUCCESS
+filesize=5026290
+
+============================================================
+[TIKTOK TASK END]
+task_id=298024
+result=SUCCESS
+attempts=1
+first_strategy=DIRECT
+final_strategy=DIRECT
+resolve=SUCCESS
+download=SUCCESS
+cookie_changed=false
+total_time=13.1s
+============================================================
+
