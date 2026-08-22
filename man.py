@@ -4,12 +4,10 @@ import sys
 import os
 import json
 import time
-import socket
 import secrets
 import re
 import threading
 import subprocess
-import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from PyQt5.QtGui import QIcon
@@ -112,11 +110,199 @@ COOKIES_DIR = RUN_DIR / "cookies"
 
 
 # ============================================================
-# Chrome CDP
+# TikTok 下载策略（三级：普通下载 → 降并发重试 → Session 回退）
+# Cookie / UA / Referer 由浏览器扩展同步，不再依赖 Chrome CDP
 # ============================================================
 
-CHROME_HOST = "127.0.0.1"
-CHROME_PORT = 9222
+# 总尝试次数（含首次，不无限重试）
+TIKTOK_MAX_RETRIES = 4
+# 每次尝试的并发片段数（失败后逐步降低：8 → 4 → 4 → 2）
+TIKTOK_CONCURRENCY_STAGES = [8, 4, 4, 2]
+# 第 2/3/4 次尝试前的等待秒数
+TIKTOK_RETRY_DELAYS = [5, 8, 12]
+# TikTok 默认 Referer（扩展能提供实际页面 Referer 时优先使用扩展值）
+TIKTOK_DEFAULT_REFERER = "https://www.tiktok.com/"
+
+
+# ============================================================
+# 下载代理（本机 v2rayN 混合端口）
+#
+# 所有平台的 yt-dlp 下载（TikTok / YouTube / Instagram 等）统一走此代理，
+# 通过 --proxy 明确传入，不依赖系统代理 / TUN 是否开启。
+# 只影响 yt-dlp 下载：不修改 v2rayN、不改系统代理、不改浏览器代理。
+# Retry 全程使用同一个代理，不切换。
+# ============================================================
+
+TIKTOK_PROXY_ENABLED = True
+TIKTOK_PROXY = "http://127.0.0.1:10808"
+
+
+def tiktok_parse_proxy(proxy_url):
+    """解析代理配置为 (类型, 主机, 端口)，仅用于日志展示"""
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(str(proxy_url))
+        return (
+            parsed.scheme or "NA",
+            parsed.hostname or "NA",
+            str(parsed.port) if parsed.port else "NA"
+        )
+    except Exception:
+        return ("NA", "NA", "NA")
+
+
+# ============================================================
+# TikTok 调试日志（专用于 GitHub 诊断，与 GUI 日志完全分离）
+#
+# 日志位置：logs/tiktok_debug.log（程序启动时清空，只保留本轮运行）
+# 开关：TIKTOK_DEBUG_LOG = True / False
+# 脱敏：永不写入 Cookie 真实值、Session、Authorization、密码；
+#       关键 Cookie 只记录 present / absent
+# ============================================================
+
+TIKTOK_DEBUG_LOG = True
+TIKTOK_DEBUG_DIR = RUN_DIR / "logs"
+TIKTOK_DEBUG_LOG_FILE = TIKTOK_DEBUG_DIR / "tiktok_debug.log"
+
+_tiktok_debug_lock = threading.Lock()
+
+# URL 中需要脱敏的查询参数关键词（命中则值替换为 REDACTED）
+TIKTOK_URL_SENSITIVE_QUERY = (
+    "token", "session", "sig", "sign", "key",
+    "auth", "secret", "pass", "credential"
+)
+
+# TikTok 关键 Cookie 名（日志中只记录是否存在，绝不记录真实值）
+TIKTOK_KEY_COOKIES = (
+    "sessionid", "msToken", "sid_tt",
+    "sid_guard", "passport_csrf_token", "ttwid"
+)
+
+
+def tiktok_debug(*lines):
+    """追加写入 TikTok 调试日志（关闭开关时完全无操作）"""
+    if not TIKTOK_DEBUG_LOG:
+        return
+    try:
+        TIKTOK_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+        with _tiktok_debug_lock:
+            with open(TIKTOK_DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
+                for line in lines:
+                    f.write(str(line).rstrip("\n") + "\n")
+    except Exception:
+        pass
+
+
+def tiktok_debug_section(title, pairs, bordered=False):
+    """写入一个日志段落：[TITLE] + key=value 行"""
+    body = [f"[{title}]"] + [f"{k}={v}" for k, v in pairs]
+    if bordered:
+        sep = "=" * 60
+        tiktok_debug(sep, *body, sep)
+    else:
+        tiktok_debug(*body)
+    tiktok_debug("")
+
+
+def init_tiktok_debug_log():
+    """程序启动时清空旧日志：GitHub 上永远只有本轮运行的诊断信息"""
+    if not TIKTOK_DEBUG_LOG:
+        return
+    try:
+        TIKTOK_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+        header = (
+            "# TikTok debug log（已脱敏，可安全上传 GitHub）\n"
+            f"# session_start={time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        )
+        with _tiktok_debug_lock:
+            TIKTOK_DEBUG_LOG_FILE.write_text(header, encoding="utf-8")
+    except Exception:
+        pass
+
+
+def tiktok_redact_url(url):
+    """URL 脱敏：保留路径，将敏感查询参数的值替换为 REDACTED"""
+    try:
+        from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+        parsed = urlparse(str(url))
+        if not parsed.query:
+            return str(url)
+        query = []
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+            if any(s in key.lower() for s in TIKTOK_URL_SENSITIVE_QUERY):
+                query.append((key, "REDACTED"))
+            else:
+                query.append((key, value))
+        return urlunparse(parsed._replace(query=urlencode(query)))
+    except Exception:
+        return str(url)
+
+
+def tiktok_cookie_stats(path):
+    """统计 Netscape Cookie 文件（脱敏）：大小 / 条数 / mtime / 关键 Cookie 是否存在"""
+    info = {
+        "exists": False,
+        "size": 0,
+        "count": 0,
+        "mtime": "NA",
+    }
+    for name in TIKTOK_KEY_COOKIES:
+        info[name] = "absent"
+    try:
+        path = Path(path)
+        if not path.exists():
+            return info
+        st = path.stat()
+        info["exists"] = True
+        info["size"] = st.st_size
+        info["mtime"] = time.strftime(
+            "%Y-%m-%d %H:%M:%S",
+            time.localtime(st.st_mtime)
+        )
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        names = set()
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") and not stripped.startswith("#HttpOnly_"):
+                continue
+            parts = stripped.split("\t")
+            if len(parts) >= 7:
+                names.add(parts[5])
+                info["count"] += 1
+        for name in TIKTOK_KEY_COOKIES:
+            # Cookie 名大小写不敏感（如 msToken / mstoken）
+            if any(n.lower() == name.lower() for n in names):
+                info[name] = "present"
+    except Exception:
+        pass
+    return info
+
+
+_YTDLP_VERSION_CACHE = None
+
+
+def get_ytdlp_version():
+    """获取 yt-dlp 版本（整个会话只探测一次）"""
+    global _YTDLP_VERSION_CACHE
+    if _YTDLP_VERSION_CACHE is not None:
+        return _YTDLP_VERSION_CACHE
+    version = "unknown"
+    try:
+        result = subprocess.run(
+            [str(YTDLP_EXE), "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            timeout=15
+        )
+        out = (result.stdout or "").strip()
+        if out:
+            version = out.splitlines()[0]
+    except Exception:
+        pass
+    _YTDLP_VERSION_CACHE = version
+    return version
 
 
 # ============================================================
@@ -252,9 +438,14 @@ class OmniGetBridgeHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "message": "Missing url"})
                 return
 
-            # 扩展发送的 Cookie + UA 一起处理
+            # 扩展发送的 Cookie + UA + Referer 一起处理（统一请求上下文来源）
             cookies = data.get("cookies", [])
             ua = data.get("userAgent", "").strip()
+            referer = str(data.get("referer", "") or "").strip()
+
+            # 扩展同步实际页面 Referer（按域名保存，下载时构造请求上下文）
+            if referer:
+                self.server.bridge.save_referer(referer)
 
             # 如果有 Cookie，自动更新
             if cookies and self.server.bridge.cookies_callback:
@@ -292,6 +483,10 @@ class OmniGetBridgeHandler(BaseHTTPRequestHandler):
             cookies = data.get("cookies", [])
             source_url = data.get("sourceUrl", "")
             ua = data.get("userAgent", "").strip()
+
+            # 捕获页面即保存该页面 Referer（供下载时构造请求上下文）
+            if source_url:
+                self.server.bridge.save_referer(source_url)
 
             if cookies and self.server.bridge.cookies_callback:
                 try:
@@ -362,6 +557,27 @@ class OmniGetBridge:
                 self.url_callback(url)
             except Exception as e:
                 self.log(f"URL 回调执行失败：{e}")
+
+    def save_referer(self, referer_url):
+        """保存扩展同步的页面 Referer（按根域名）
+
+        供下载时构造请求上下文：扩展提供的实际页面地址优先于默认值。
+        扩展是增强能力，不是下载前置条件，保存失败不影响任何流程。
+        """
+        try:
+            referer_url = str(referer_url or "").strip()
+            if not referer_url.startswith(("http://", "https://")):
+                return
+            root = CookieManager.root_domain_of(
+                CookieManager._extract_host(referer_url)
+            )
+            if not root:
+                return
+            target_dir = COOKIES_DIR / CookieManager._safe_domain_segment(root)
+            target_dir.mkdir(parents=True, exist_ok=True)
+            write_text_file(target_dir / "_referer.txt", referer_url)
+        except Exception as e:
+            self.log(f"Referer 保存失败：{e}")
 
     def start_pairing(self):
         """开启配对窗口（约 120 秒）"""
@@ -1258,765 +1474,6 @@ class OutputFolderLineEdit(QLineEdit):
 
 
 # ============================================================
-# Chrome CDP 客户端
-# ============================================================
-
-class ChromeCDP:
-
-    def __init__(
-        self,
-        host="127.0.0.1",
-        port=9222
-    ):
-
-        self.host = host
-        self.port = port
-
-        self.ws = None
-
-        self.page = None
-
-        self.message_id = 0
-
-    # --------------------------------------------------------
-    # 检测 Chrome
-    # --------------------------------------------------------
-
-    def is_available(self):
-
-        try:
-
-            sock = socket.create_connection(
-                (
-                    self.host,
-                    self.port
-                ),
-                timeout=2
-            )
-
-            sock.close()
-
-            return True
-
-        except Exception:
-
-            return False
-
-    # --------------------------------------------------------
-    # HTTP JSON
-    # --------------------------------------------------------
-
-    def http_get_json(self, path):
-
-        url = (
-            f"http://{self.host}:"
-            f"{self.port}"
-            f"{path}"
-        )
-
-        request = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": DEFAULT_UA
-            }
-        )
-
-        with urllib.request.urlopen(
-            request,
-            timeout=5
-        ) as response:
-
-            data = response.read()
-
-        return json.loads(
-            data.decode(
-                "utf-8",
-                errors="ignore"
-            )
-        )
-
-    # --------------------------------------------------------
-    # Chrome 版本
-    # --------------------------------------------------------
-
-    def get_version(self):
-
-        return self.http_get_json(
-            "/json/version"
-        )
-
-    # --------------------------------------------------------
-    # 页面
-    # --------------------------------------------------------
-
-    def get_pages(self):
-
-        try:
-
-            pages = self.http_get_json(
-                "/json"
-            )
-
-            if not isinstance(
-                pages,
-                list
-            ):
-
-                return []
-
-            return pages
-
-        except Exception as e:
-
-            print(
-                f"获取 Chrome 页面失败：{e}"
-            )
-
-            return []
-
-    # --------------------------------------------------------
-    # 获取页面
-    # --------------------------------------------------------
-
-    def get_page(self):
-
-        pages = self.get_pages()
-
-        if not pages:
-
-            raise RuntimeError(
-                "Chrome 没有打开任何可用页面。"
-            )
-
-        preferred = (
-            "tiktok.com",
-            "youtube.com",
-            "facebook.com",
-            "instagram.com",
-            "twitter.com",
-            "x.com"
-        )
-
-        for page in pages:
-
-            page_type = str(
-                page.get(
-                    "type",
-                    ""
-                )
-            ).lower()
-
-            if page_type != "page":
-                continue
-
-            url = str(
-                page.get(
-                    "url",
-                    ""
-                )
-            ).lower()
-
-            for domain in preferred:
-
-                if domain in url:
-
-                    return page
-
-        for page in pages:
-
-            if str(
-                page.get(
-                    "type",
-                    ""
-                )
-            ).lower() == "page":
-
-                return page
-
-        raise RuntimeError(
-            "Chrome 没有找到普通网页 Target。"
-        )
-
-    # --------------------------------------------------------
-    # CDP 连接
-    # --------------------------------------------------------
-
-    def connect(self):
-
-        try:
-
-            import websocket
-
-        except ImportError:
-
-            raise RuntimeError(
-                "缺少 websocket-client。\n\n"
-                "请执行：\n"
-                "python -m pip install -U websocket-client"
-            )
-
-        if not hasattr(
-            websocket,
-            "create_connection"
-        ):
-
-            module_file = getattr(
-                websocket,
-                "__file__",
-                "未知"
-            )
-
-            raise RuntimeError(
-                "当前 websocket 模块不正确。\n\n"
-                f"模块位置：\n{module_file}\n\n"
-                "请执行：\n"
-                "python -m pip uninstall websocket -y\n"
-                "python -m pip install -U websocket-client"
-            )
-
-        page = self.get_page()
-
-        self.page = page
-
-        ws_url = page.get(
-            "webSocketDebuggerUrl"
-        )
-
-        if not ws_url:
-
-            raise RuntimeError(
-                "Chrome 页面没有返回 webSocketDebuggerUrl。"
-            )
-
-        try:
-
-            self.ws = websocket.create_connection(
-                ws_url,
-                timeout=15,
-                enable_multithread=True
-            )
-
-        except TypeError:
-
-            self.ws = websocket.create_connection(
-                ws_url,
-                timeout=15
-            )
-
-        except Exception as e:
-
-            raise RuntimeError(
-                "连接 Chrome CDP WebSocket 失败：\n"
-                f"{e}"
-            )
-
-        self.message_id = 0
-
-        return page
-
-    # --------------------------------------------------------
-    # CDP 调用
-    # --------------------------------------------------------
-
-    def call(
-        self,
-        method,
-        params=None
-    ):
-
-        if self.ws is None:
-
-            raise RuntimeError(
-                "Chrome CDP 尚未连接。"
-            )
-
-        self.message_id += 1
-
-        message_id = self.message_id
-
-        payload = {
-            "id": message_id,
-            "method": method
-        }
-
-        if params is not None:
-
-            payload["params"] = params
-
-        try:
-
-            self.ws.send(
-                json.dumps(
-                    payload,
-                    ensure_ascii=False
-                )
-            )
-
-        except Exception as e:
-
-            raise RuntimeError(
-                f"CDP 发送失败：{e}"
-            )
-
-        while True:
-
-            try:
-
-                response = self.ws.recv()
-
-            except Exception as e:
-
-                raise RuntimeError(
-                    f"CDP 接收失败：{e}"
-                )
-
-            if not response:
-                continue
-
-            try:
-
-                data = json.loads(
-                    response
-                )
-
-            except Exception:
-
-                continue
-
-            if data.get("id") != message_id:
-                continue
-
-            if "error" in data:
-
-                raise RuntimeError(
-                    f"CDP {method} 调用失败："
-                    f"{data.get('error', {})}"
-                )
-
-            return data.get(
-                "result",
-                {}
-            )
-
-    # --------------------------------------------------------
-    # Cookie
-    # --------------------------------------------------------
-
-    def get_cookies(self):
-
-        urls = []
-
-        try:
-
-            pages = self.get_pages()
-
-            for page in pages:
-
-                if str(
-                    page.get(
-                        "type",
-                        ""
-                    )
-                ).lower() != "page":
-
-                    continue
-
-                url = str(
-                    page.get(
-                        "url",
-                        ""
-                    )
-                ).strip()
-
-                if (
-                    url.startswith(
-                        "http://"
-                    )
-                    or
-                    url.startswith(
-                        "https://"
-                    )
-                ):
-
-                    if url not in urls:
-
-                        urls.append(url)
-
-        except Exception:
-
-            pass
-
-        if self.page:
-
-            current_url = str(
-                self.page.get(
-                    "url",
-                    ""
-                )
-            ).strip()
-
-            if (
-                current_url.startswith(
-                    "http://"
-                )
-                or
-                current_url.startswith(
-                    "https://"
-                )
-            ):
-
-                if current_url in urls:
-
-                    urls.remove(
-                        current_url
-                    )
-
-                urls.insert(
-                    0,
-                    current_url
-                )
-
-        if not urls:
-
-            raise RuntimeError(
-                "Chrome 当前没有可读取 Cookie 的 HTTP/HTTPS 页面。"
-            )
-
-        urls = urls[:20]
-
-        all_cookies = []
-
-        cookie_keys = set()
-
-        for url in urls:
-
-            try:
-
-                result = self.call(
-                    "Network.getCookies",
-                    {
-                        "urls": [
-                            url
-                        ]
-                    }
-                )
-
-                cookies = result.get(
-                    "cookies",
-                    []
-                )
-
-                if not isinstance(
-                    cookies,
-                    list
-                ):
-
-                    continue
-
-                for cookie in cookies:
-
-                    try:
-
-                        key = (
-                            str(
-                                cookie.get(
-                                    "domain",
-                                    ""
-                                )
-                            ),
-                            str(
-                                cookie.get(
-                                    "path",
-                                    "/"
-                                )
-                            ),
-                            str(
-                                cookie.get(
-                                    "name",
-                                    ""
-                                )
-                            )
-                        )
-
-                        if key in cookie_keys:
-                            continue
-
-                        cookie_keys.add(
-                            key
-                        )
-
-                        all_cookies.append(
-                            cookie
-                        )
-
-                    except Exception:
-
-                        continue
-
-            except Exception as e:
-
-                print(
-                    f"读取 Cookie 失败："
-                    f"{url} -> {e}"
-                )
-
-                continue
-
-        if not all_cookies:
-
-            raise RuntimeError(
-                "Chrome 没有读取到 Cookie。\n\n"
-                "请确认：\n"
-                "1. Chrome 已登录目标网站\n"
-                "2. Chrome 当前打开目标网站页面\n"
-                "3. Chrome 使用 --remote-debugging-port=9222 启动"
-            )
-
-        return all_cookies
-
-    # --------------------------------------------------------
-    # UA
-    # --------------------------------------------------------
-
-    def get_user_agent(self):
-
-        try:
-
-            version = self.get_version()
-
-            ua = version.get(
-                "User-Agent",
-                ""
-            )
-
-            if ua:
-
-                ua = str(
-                    ua
-                ).strip()
-
-                if ua:
-                    return ua
-
-        except Exception as e:
-
-            print(
-                f"/json/version 获取 UA 失败：{e}"
-            )
-
-        try:
-
-            result = self.call(
-                "Runtime.evaluate",
-                {
-                    "expression":
-                        "navigator.userAgent",
-                    "returnByValue":
-                        True
-                }
-            )
-
-            value = (
-                result
-                .get(
-                    "result",
-                    {}
-                )
-                .get(
-                    "result",
-                    {}
-                )
-                .get(
-                    "value",
-                    ""
-                )
-            )
-
-            if value:
-
-                value = str(
-                    value
-                ).strip()
-
-                if value:
-                    return value
-
-        except Exception as e:
-
-            print(
-                f"Runtime.evaluate 获取 UA 失败：{e}"
-            )
-
-        return DEFAULT_UA
-
-    def close(self):
-
-        try:
-
-            if self.ws:
-
-                self.ws.close()
-
-        except Exception:
-
-            pass
-
-        self.ws = None
-        self.page = None
-
-
-# ============================================================
-# Chrome Cookie → Netscape
-# ============================================================
-
-def chrome_cookies_to_netscape(cookies):
-
-    lines = [
-        "# Netscape HTTP Cookie File",
-        "# Generated by Python Chrome CDP",
-        "# DO NOT EDIT",
-        ""
-    ]
-
-    count = 0
-
-    for cookie in cookies:
-
-        try:
-
-            domain = str(
-                cookie.get(
-                    "domain",
-                    ""
-                )
-            )
-
-            include_subdomains = (
-                "TRUE"
-                if domain.startswith(".")
-                else "FALSE"
-            )
-
-            path = str(
-                cookie.get(
-                    "path",
-                    "/"
-                )
-            )
-
-            secure = (
-                "TRUE"
-                if cookie.get(
-                    "secure",
-                    False
-                )
-                else "FALSE"
-            )
-
-            expires = cookie.get(
-                "expires",
-                0
-            )
-
-            try:
-
-                expires = int(
-                    float(expires)
-                )
-
-            except Exception:
-
-                expires = 0
-
-            if expires < 0:
-
-                expires = 0
-
-            name = str(
-                cookie.get(
-                    "name",
-                    ""
-                )
-            )
-
-            value = str(
-                cookie.get(
-                    "value",
-                    ""
-                )
-            )
-
-            domain = domain.replace(
-                "\t",
-                ""
-            ).replace(
-                "\r",
-                ""
-            ).replace(
-                "\n",
-                ""
-            )
-
-            path = path.replace(
-                "\t",
-                ""
-            ).replace(
-                "\r",
-                ""
-            ).replace(
-                "\n",
-                ""
-            )
-
-            name = name.replace(
-                "\t",
-                ""
-            ).replace(
-                "\r",
-                ""
-            ).replace(
-                "\n",
-                ""
-            )
-
-            value = value.replace(
-                "\r",
-                ""
-            ).replace(
-                "\n",
-                ""
-            ).replace(
-                "\t",
-                ""
-            )
-
-            lines.append(
-                "\t".join(
-                    [
-                        domain,
-                        include_subdomains,
-                        path,
-                        secure,
-                        str(expires),
-                        name,
-                        value
-                    ]
-                )
-            )
-
-            count += 1
-
-        except Exception:
-
-            continue
-
-    return (
-        "\r\n".join(lines)
-        + "\r\n"
-    ), count
-
-
-# ============================================================
 # 下载线程
 # ============================================================
 
@@ -2081,6 +1538,10 @@ class DownloadThread(QThread):
 
         self.failed = 0
 
+        # UA / TikTok Cookie 解析缓存（按文件 mtime 失效，扩展更新后自动重新加载）
+        self._ua_cache = None
+        self.tiktok_cookie_cache = {}
+
     def stop(self):
 
         self.stop_flag = True
@@ -2131,16 +1592,30 @@ class DownloadThread(QThread):
                 "警告：FFprobe 未找到。"
             )
 
-    def get_ua(self):
+    def get_ua(self, force_reload=False):
+        """读取扩展同步的 UA（browser_ua.txt）
 
-        ua = read_text_file(
-            UA_FILE
-        )
+        按文件 mtime 缓存：文件未变化时直接使用缓存，扩展更新后自动重新加载。
+        不随机生成 UA，保证与扩展 Cookie 对应。
+        """
+        try:
+            mtime = UA_FILE.stat().st_mtime if UA_FILE.exists() else 0
+        except Exception:
+            mtime = 0
+
+        if (
+            not force_reload
+            and self._ua_cache is not None
+            and self._ua_cache[0] == mtime
+        ):
+            return self._ua_cache[1]
+
+        ua = read_text_file(UA_FILE)
 
         if not ua:
-
             ua = DEFAULT_UA
 
+        self._ua_cache = (mtime, ua)
         return ua
 
     # Cookie 新鲜度阈值（秒）：超过此时间认为可能过期
@@ -2167,7 +1642,12 @@ class DownloadThread(QThread):
 
         优先使用统一 Cookie 文件（包含浏览器全部 Cookie，yt-dlp 自动按域名匹配）
         回退到按域名分类存储，最后回退到旧的 cookies.txt
+
+        TikTok 例外：按域名独立 Cookie（不使用统一 Cookie 文件），见 get_tiktok_cookie_args
         """
+        if url and detect_platform(url) == "tiktok":
+            return self.get_tiktok_cookie_args(url)
+
         args = []
 
         # 优先使用统一 Cookie 文件（扩展自动同步全部 Cookie）
@@ -2230,6 +1710,87 @@ class DownloadThread(QThread):
 
         return args
 
+    def get_tiktok_cookie_args(self, url, force_reload=False):
+        """TikTok 专用 Cookie 选择：按平台独立，不用统一 Cookie 文件
+
+        优先级：
+        1. 扩展最新同步的 cookies/tiktok.com/_default.txt
+        2. 本地关联域名 Cookie（tiktokcdn.com）
+        3. 无 Cookie（继续下载，扩展不是强制依赖）
+
+        用文件 mtime 作为缓存签名（tiktok_cookie_cache）：
+        文件未变化时直接复用缓存，扩展更新文件后自动重新解析。
+        """
+        candidates = [
+            self.cookies_dir / d / "_default.txt"
+            for d in ("tiktok.com", "tiktokcdn.com")
+        ]
+
+        # 缓存签名 = 所有存在的候选文件的 (路径, mtime)
+        signature = []
+        for path in candidates:
+            try:
+                if path.exists():
+                    signature.append((str(path), path.stat().st_mtime))
+            except Exception:
+                continue
+        signature = tuple(signature)
+
+        if not force_reload:
+            cached = self.tiktok_cookie_cache.get("tiktok")
+            if cached is not None and cached[0] == signature:
+                return cached[1]
+
+        args = []
+        chosen = next((p for p in candidates if p.exists()), None)
+        if chosen is not None:
+            age, status = self._check_cookie_freshness(chosen)
+            if status == "expired":
+                self.log(f"⚠ TikTok Cookie 可能已过期（{int(age/3600)} 小时前更新），建议在浏览器中刷新 TikTok 页面")
+            else:
+                self.log(f"[TikTok] 使用扩展同步的 Cookie：{chosen}")
+            args = ["--cookies", str(chosen)]
+        else:
+            self.log("[TikTok] 无可用 Cookie，继续无 Cookie 下载（扩展未同步不阻断下载）")
+
+        self.tiktok_cookie_cache["tiktok"] = (signature, args)
+        return args
+
+    def get_referer(self, url):
+        """获取请求 Referer：优先扩展同步的实际页面地址，其次平台默认值"""
+        try:
+            root = CookieManager.root_domain_of(
+                CookieManager._extract_host(url)
+            )
+            if root:
+                referer = read_text_file(
+                    self.cookies_dir / root / "_referer.txt"
+                )
+                if referer:
+                    return referer
+        except Exception:
+            pass
+
+        if detect_platform(url) == "tiktok":
+            return TIKTOK_DEFAULT_REFERER
+        return None
+
+    def _build_tiktok_context(self, url, force_reload=False):
+        """构造 TikTok 统一请求上下文：Cookie + UA + Referer + Proxy
+
+        四者作为同一个请求环境一起使用，保持对应，不分别随机获取。
+        force_reload=True 时绕过缓存，重新读取扩展最新同步的文件（Session 回退阶段使用）。
+        Proxy 全程固定为 TIKTOK_PROXY，Retry 不切换。
+        """
+        if force_reload:
+            self.log("[TikTok] 重新读取扩展同步的 Cookie / UA / Referer")
+        return {
+            "cookie_args": self.get_tiktok_cookie_args(url, force_reload=force_reload),
+            "ua": self.get_ua(force_reload=force_reload),
+            "referer": self.get_referer(url),
+            "proxy": TIKTOK_PROXY if TIKTOK_PROXY_ENABLED else None,
+        }
+
     def get_video_id(self, url):
 
         try:
@@ -2241,6 +1802,10 @@ class DownloadThread(QThread):
                 "--no-warnings",
                 url
             ]
+
+            # 元数据解析同样走统一代理，保证与下载环境一致
+            if TIKTOK_PROXY_ENABLED and TIKTOK_PROXY:
+                cmd.extend(["--proxy", TIKTOK_PROXY])
 
             result = subprocess.run(
                 cmd,
@@ -2310,8 +1875,9 @@ class DownloadThread(QThread):
         self.log("[JS Runtime] ⚠ 未检测到任何 JS 运行时")
         return None
 
-    def build_ytdlp_args(self, url, job_dir, ua, cookie_args, player_client=None):
-        """构建 yt-dlp 命令参数，支持 YouTube player_client 配置"""
+    def build_ytdlp_args(self, url, job_dir, ua, cookie_args, player_client=None,
+                         referer=None, concurrency=None):
+        """构建 yt-dlp 命令参数，支持 YouTube player_client / TikTok 请求上下文配置"""
         self.log(f"[DEBUG] build_ytdlp_args 被调用: {url[:60]}...")
         output_template = job_dir / "source.%(ext)s"
 
@@ -2348,6 +1914,10 @@ class DownloadThread(QThread):
 
         cmd.extend(cookie_args)
 
+        # 代理：所有平台统一走本机代理（明确传入 --proxy，不依赖系统代理 / TUN）
+        if TIKTOK_PROXY_ENABLED and TIKTOK_PROXY:
+            cmd.extend(["--proxy", TIKTOK_PROXY])
+
         # TikTok 特定参数：添加完整的浏览器请求头
         is_tiktok_cmd = detect_platform(url) == "tiktok"
         if is_tiktok_cmd:
@@ -2364,10 +1934,16 @@ class DownloadThread(QThread):
                 "--add-header", "Sec-Fetch-User: ?1",
             ])
             self.log("[yt-dlp] TikTok 模式：启用完整浏览器请求头")
-            
-            # TikTok 使用 8 个并发片段（与 OmniGet 一致）
-            cmd.extend(["-N", "8"])
-            self.log("[yt-dlp] TikTok 模式：启用 8 个并发片段")
+
+            # Referer：优先扩展同步的实际页面地址，其次默认值（不随机）
+            if not referer:
+                referer = TIKTOK_DEFAULT_REFERER
+            cmd.extend(["--referer", referer])
+
+            # 并发片段数：失败后逐步降低（8 → 4 → 4 → 2）
+            workers = concurrency or TIKTOK_CONCURRENCY_STAGES[0]
+            cmd.extend(["-N", str(workers)])
+            self.log(f"[yt-dlp] TikTok 模式：并发 {workers}，Referer {referer}")
 
         # YouTube 特定参数
         is_youtube = detect_platform(url) == "youtube"
@@ -2432,16 +2008,23 @@ class DownloadThread(QThread):
     def download_source(self, url, job_dir):
         """下载视频源，支持网络重试（所有平台）
 
-        单层重试：网络波动自动重试（最多 3 次）
+        TikTok：三级策略（普通下载 → 降并发重试 → Session 回退），见 _download_tiktok
+        其他平台：网络波动自动重试（最多 3 次）
         不再使用 YouTube player_client 轮换，避免被检测为异常行为
         """
+        platform = detect_platform(url)
+
+        # TikTok 走专用三级重试流程：只消费扩展同步的文件，不连接浏览器、不后台访问 TikTok
+        if platform == "tiktok":
+            return self._download_tiktok(url, job_dir)
+
         ua = self.get_ua()
         cookie_args = self.get_cookie_args(url)
-        is_youtube = detect_platform(url) == "youtube"
-        platform = detect_platform(url)
-        
+        is_youtube = platform == "youtube"
+
         # 需要预请求的平台列表（模拟用户点击，避免被识别为机器人）
-        platforms_need_prefetch = ["tiktok", "instagram", "twitter", "x", "reddit"]
+        # 注意：TikTok 不做预请求/后台访问，浏览器活跃状态由用户 + 扩展负责
+        platforms_need_prefetch = ["instagram", "twitter", "x", "reddit"]
         
         # 预请求：模拟用户点击视频链接
         if platform in platforms_need_prefetch:
@@ -2512,47 +2095,16 @@ class DownloadThread(QThread):
             self.log(f"[DEBUG] URL 长度: {len(url)}")
             self.log(url)
 
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                cwd=str(RUN_DIR),
-                bufsize=1
-            )
+            ok, output_text = self._run_ytdlp(cmd)
 
-            stderr_output = []
-
-            for line in iter(process.stdout.readline, ""):
-                if self.stop_flag or self.skip_flag:
-                    try:
-                        process.terminate()
-                    except Exception:
-                        pass
-                    return False
-
-                line = line.rstrip()
-                if line:
-                    stderr_output.append(line)
-                    self.log(line)
-
-                    if "%" in line:
-                        try:
-                            progress = int(line.split("%")[0].split()[-1])
-                            if 0 <= progress <= 100:
-                                self.progress_signal.emit(progress)
-                        except ValueError:
-                            pass
-
-            process.wait()
-
-            if process.returncode == 0:
+            if ok:
                 return True
 
+            if self.stop_flag or self.skip_flag:
+                return False
+
             # 分析错误原因
-            stderr_text = "\n".join(stderr_output).lower()
+            stderr_text = output_text.lower()
 
             # 判断是否可重试的网络错误
             if self._is_network_error(stderr_text):
@@ -2563,25 +2115,513 @@ class DownloadThread(QThread):
                     self.log(f"[网络] 已重试 {self.NETWORK_MAX_RETRIES} 次仍然失败")
                     return False
 
-            # TikTok 特定错误：提示用户刷新 Cookie
-            is_tiktok = detect_platform(url) == "tiktok"
-            tiktok_errors = [
-                "unable to extract universal data",
-                "unexpected response from webpage",
-                "http error 403",
-            ]
-            if is_tiktok and any(err in stderr_text for err in tiktok_errors):
-                self.log(f"")
-                self.log(f"[TikTok] ⚠ 下载失败，可能是 Cookie 过期或 TikTok 反爬机制拦截")
-                self.log(f"[TikTok] 建议操作：")
-                self.log(f"  1. 在浏览器中打开 TikTok 并刷新页面")
-                self.log(f"  2. 等待扩展自动同步新 Cookie（约 5-10 秒）")
-                self.log(f"  3. 右键点击失败的链接 → 重试下载")
-                self.log(f"")
-
             # 其他错误（不可重试）直接返回
             return False
 
+        return False
+
+    def _run_ytdlp(self, cmd):
+        """执行 yt-dlp 命令，实时输出日志与进度，返回 (是否成功, 完整输出文本)"""
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(RUN_DIR),
+            bufsize=1
+        )
+
+        output_lines = []
+
+        for line in iter(process.stdout.readline, ""):
+            if self.stop_flag or self.skip_flag:
+                try:
+                    process.terminate()
+                except Exception:
+                    pass
+                return False, "\n".join(output_lines)
+
+            line = line.rstrip()
+            if line:
+                output_lines.append(line)
+                self.log(line)
+
+                if "%" in line:
+                    try:
+                        progress = int(line.split("%")[0].split()[-1])
+                        if 0 <= progress <= 100:
+                            self.progress_signal.emit(progress)
+                    except ValueError:
+                        pass
+
+        process.wait()
+        return process.returncode == 0, "\n".join(output_lines)
+
+    # ---- TikTok 错误分类 ----
+    # SESSION_ERROR：403 / 429 / Unexpected response / TikTok webpage 异常 → 重读扩展 Cookie/UA 后重试
+    # EXTRACTOR_ERROR：Unable to extract 系列 → 同样触发 Session 回退（按改造方案第七节）
+    # NETWORK_ERROR：timeout / connection reset / 502 / 503 / 504 → 同上下文降并发重试，不刷新 Cookie
+    # UNKNOWN_ERROR：记录完整日志，不盲目刷新 Cookie，直接失败
+
+    TIKTOK_SESSION_ERROR_INDICATORS = [
+        "http error 403",
+        "http error 429",
+        "unexpected response",
+        "tiktok webpage",
+    ]
+
+    # 代理自身故障的特征（本机代理端口未监听 / 代理节点不可达），
+    # 命中时记录 [PROXY ERROR]，不笼统归为下载失败。
+    # 注意：必须同时出现代理地址与连接失败字样才算，避免把站点封禁误判为代理问题。
+    TIKTOK_PROXY_ERROR_INDICATORS = [
+        "proxy connection refused",
+        "cannot connect to proxy",
+        "unable to connect to proxy",
+        "connection to proxy failed",
+        "could not connect to proxy",
+        "failed to establish connection with proxy",
+        "tunnel connection failed",
+        "proxy returned error",
+    ]
+
+    def _is_tiktok_proxy_error(self, output_text):
+        """判断失败输出是否为代理自身故障（代理端口不通 / 代理节点拒绝）"""
+        if not (TIKTOK_PROXY_ENABLED and TIKTOK_PROXY):
+            return False
+        text = output_text.lower()
+        if not any(ind in text for ind in self.TIKTOK_PROXY_ERROR_INDICATORS):
+            return False
+        # 进一步确认输出中确实引用了本机代理（端口或主机），降低误判
+        ptype, phost, pport = tiktok_parse_proxy(TIKTOK_PROXY)
+        return phost in text or pport in text
+
+    TIKTOK_EXTRACTOR_ERROR_INDICATORS = [
+        "unable to extract universal data",
+        "unable to extract",
+    ]
+
+    def _classify_tiktok_error(self, output_text):
+        """TikTok 失败输出分类：SESSION / EXTRACTOR / NETWORK / UNKNOWN"""
+        text = output_text.lower()
+        # Session 类优先判断（429 在 TikTok 场景属于 Session 而非普通网络错误）
+        if any(ind in text for ind in self.TIKTOK_SESSION_ERROR_INDICATORS):
+            return "SESSION_ERROR"
+        if any(ind in text for ind in self.TIKTOK_EXTRACTOR_ERROR_INDICATORS):
+            return "EXTRACTOR_ERROR"
+        if self._is_network_error(text):
+            return "NETWORK_ERROR"
+        return "UNKNOWN_ERROR"
+
+    # ---- TikTok 调试日志辅助（只写 logs/tiktok_debug.log，不影响 GUI 日志） ----
+
+    def _tiktok_cookie_snapshot(self):
+        """当前生效的 TikTok Cookie 文件快照：(mtime, size)，不存在返回 (None, 0)"""
+        for d in ("tiktok.com", "tiktokcdn.com"):
+            p = self.cookies_dir / d / "_default.txt"
+            if p.exists():
+                try:
+                    st = p.stat()
+                    return (
+                        time.strftime("%H:%M:%S", time.localtime(st.st_mtime)),
+                        st.st_size
+                    )
+                except Exception:
+                    return (None, 0)
+        return (None, 0)
+
+    def _tiktok_error_reason(self, output_text):
+        """从失败输出提取具体原因（供 [ERROR CLASSIFICATION] / [RETRY] 使用）"""
+        text = output_text.lower()
+        checks = [
+            ("http error 403", "HTTP_403"),
+            ("http error 429", "HTTP_429"),
+            ("http error 502", "HTTP_502"),
+            ("http error 503", "HTTP_503"),
+            ("http error 504", "HTTP_504"),
+            ("http error 401", "HTTP_401"),
+            ("unable to extract universal data", "UNABLE_TO_EXTRACT_UNIVERSAL_DATA"),
+            ("unable to extract", "UNABLE_TO_EXTRACT"),
+            ("unexpected response", "UNEXPECTED_RESPONSE"),
+            ("tiktok webpage", "WEBPAGE_REQUEST_FAILED"),
+            ("timed out", "TIMEOUT"),
+            ("timeout", "TIMEOUT"),
+            ("connection reset", "CONNECTION_RESET"),
+            ("connection aborted", "CONNECTION_ABORTED"),
+            ("connection refused", "CONNECTION_REFUSED"),
+            ("could not resolve", "DNS_FAILURE"),
+            ("ssl", "SSL_ERROR"),
+        ]
+        for needle, reason in checks:
+            if needle in text:
+                return reason
+        return "UNKNOWN"
+
+    def _tiktok_stage_from_output(self, output_text, ok):
+        """根据 yt-dlp 输出区分 Resolve / Download 阶段，返回 (resolve, download) 状态"""
+        if ok:
+            return "SUCCESS", "SUCCESS"
+        if "[download]" in output_text or "[Merger]" in output_text:
+            return "SUCCESS", "FAILED"
+        if "[info]" in output_text:
+            return "SUCCESS", "NOT_STARTED"
+        return "FAILED", "NOT_STARTED"
+
+    def _tiktok_short_error(self, output_text):
+        """提取首行 ERROR 信息（截断 300 字符）作为摘要"""
+        lines = [l.strip() for l in output_text.splitlines() if l.strip()]
+        for line in reversed(lines):
+            if line.upper().startswith("ERROR"):
+                return line[:300]
+        return lines[-1][:300] if lines else "NA"
+
+    def _tiktok_log_task_start(self, task_id, url, ctx):
+        """写入任务开始块：环境 / Cookie（脱敏） / UA / Referer"""
+        tiktok_debug_section("TIKTOK TASK START", [
+            ("time", time.strftime("%Y-%m-%d %H:%M:%S")),
+            ("task_id", task_id),
+            ("url", tiktok_redact_url(url)),
+        ], bordered=True)
+
+        tiktok_debug_section("ENVIRONMENT", [
+            ("platform", "tiktok"),
+            ("yt_dlp_path", str(YTDLP_EXE)),
+            ("yt_dlp_version", get_ytdlp_version()),
+            ("python_version", sys.version.split()[0]),
+            ("os", "Windows" if sys.platform == "win32" else sys.platform),
+        ])
+
+        # Cookie：只记录存在性 / 大小 / 数量 / mtime，绝不记录真实值
+        cookie_path = None
+        if ctx["cookie_args"]:
+            cookie_path = Path(ctx["cookie_args"][1])
+        stats_path = cookie_path or (self.cookies_dir / "tiktok.com" / "_default.txt")
+        stats = tiktok_cookie_stats(stats_path)
+        if cookie_path is None:
+            source = "none"
+        elif str(cookie_path).startswith(str(self.cookies_dir)):
+            source = "extension"
+        else:
+            source = "local"
+        pairs = [
+            ("cookie_source", source),
+            ("cookie_file", str(cookie_path) if cookie_path else "NA"),
+            ("cookie_exists", str(stats["exists"]).lower()),
+            ("cookie_size", stats["size"]),
+            ("cookie_count", stats["count"]),
+            ("cookie_mtime", stats["mtime"]),
+        ]
+        for name in TIKTOK_KEY_COOKIES:
+            pairs.append((name, stats[name]))
+        tiktok_debug_section("COOKIE", pairs)
+
+        ua = ctx["ua"] or ""
+        tiktok_debug_section("UA", [
+            ("ua_source", "extension" if check_file(UA_FILE) else "default"),
+            ("ua_exists", "true" if ua else "false"),
+            ("ua_length", len(ua)),
+            ("ua", ua[:160]),
+        ])
+
+        referer = ctx["referer"] or ""
+        referer_source = "default"
+        try:
+            root = CookieManager.root_domain_of(
+                CookieManager._extract_host(url)
+            )
+            if root and (self.cookies_dir / root / "_referer.txt").exists():
+                referer_source = "extension"
+        except Exception:
+            pass
+        tiktok_debug_section("REFERER", [
+            ("referer", referer or "NA"),
+            ("referer_source", referer_source),
+        ])
+
+        # 代理：所有 Retry 使用同一个代理，不切换（含敏感信息时只记录主机/端口，无密码字段）
+        if TIKTOK_PROXY_ENABLED and TIKTOK_PROXY:
+            ptype, phost, pport = tiktok_parse_proxy(TIKTOK_PROXY)
+            tiktok_debug_section("TIKTOK PROXY", [
+                ("enabled", "true"),
+                ("configured_proxy", TIKTOK_PROXY),
+                ("proxy_type", ptype),
+                ("host", phost),
+                ("port", pport),
+            ])
+        else:
+            tiktok_debug_section("TIKTOK PROXY", [
+                ("enabled", "false"),
+                ("configured_proxy", "NA"),
+            ])
+
+    def _tiktok_log_task_end(self, task_id, result, state, final_strategy, task_start):
+        """写入任务总结块"""
+        pairs = [
+            ("task_id", task_id),
+            ("result", result),
+            ("attempts", state["attempts"]),
+            ("first_strategy", state["first_strategy"] or "NA"),
+            ("final_strategy", final_strategy or state["final_strategy"] or "NA"),
+            ("resolve", state["resolve"]),
+            ("download", state["download"]),
+            ("cookie_changed", str(state["cookie_changed"]).lower()),
+        ]
+        if state["final_error_class"]:
+            pairs.append(("final_error_class", state["final_error_class"]))
+        if state["final_error"]:
+            pairs.append(("final_error", state["final_error"]))
+        pairs.append(("total_time", f"{time.time() - task_start:.1f}s"))
+        tiktok_debug_section("TIKTOK TASK END", pairs, bordered=True)
+
+    def _download_tiktok(self, url, job_dir):
+        """TikTok 三级下载策略（最多 TIKTOK_MAX_RETRIES 次，不无限重试）
+
+        Attempt 1：扩展 Cookie + UA + Referer，-N 8
+        Attempt 2：网络错误 → 相同上下文，-N 4（不刷新 Cookie）
+        Attempt 3：Session 错误 → 重新读取扩展 Cookie/UA/Referer 重构参数，-N 4
+        Attempt 4：再次重读 Cookie，-N 2
+        全程不连接 Chrome / CDP，只消费扩展同步的文件。
+        每一步都写入 logs/tiktok_debug.log（TIKTOK_DEBUG_LOG 控制开关）。
+        """
+        task_id = secrets.token_hex(3).upper()
+        task_start = time.time()
+
+        ctx = self._build_tiktok_context(url)
+        self._tiktok_log_task_start(task_id, url, ctx)
+
+        state = {
+            "attempts": 0,
+            "first_strategy": None,
+            "final_strategy": None,
+            "resolve": "NOT_STARTED",
+            "download": "NOT_STARTED",
+            "cookie_changed": False,
+            "final_error_class": None,
+            "final_error": None,
+        }
+
+        last_kind = None
+        strategy = "DIRECT"
+        # 上一次尝试实际使用的 Cookie 快照（用于判断刷新前后 Cookie 是否真的变化）
+        last_snapshot = self._tiktok_cookie_snapshot()
+
+        for attempt in range(1, TIKTOK_MAX_RETRIES + 1):
+            if self.stop_flag or self.skip_flag:
+                self._tiktok_log_task_end(task_id, "ABORTED", state, strategy, task_start)
+                return False
+
+            if attempt > 1:
+                delay = TIKTOK_RETRY_DELAYS[min(attempt - 2, len(TIKTOK_RETRY_DELAYS) - 1)]
+                self.log("")
+                self.log(f"[TikTok 重试 {attempt - 1}/{TIKTOK_MAX_RETRIES - 1}] 等待 {delay} 秒后重试...")
+                time.sleep(delay)
+                self._cleanup_job_dir(job_dir)
+
+                # Session 回退：重新读取扩展最新 Cookie/UA/Referer，重构请求上下文；
+                # 网络错误则保持原上下文不变（不刷新 Cookie）
+                if last_kind in ("SESSION_ERROR", "EXTRACTOR_ERROR"):
+                    strategy = "EXTENSION_COOKIE_REFRESH"
+                    # 对比：失败尝试使用的 Cookie 与刷新后重新读到的 Cookie（诊断关键）
+                    before = last_snapshot
+                    ctx = self._build_tiktok_context(url, force_reload=True)
+                    after = self._tiktok_cookie_snapshot()
+                    changed = before != after
+                    state["cookie_changed"] = state["cookie_changed"] or changed
+                    tiktok_debug_section("COOKIE REFRESH", [
+                        ("cookie_mtime_before", before[0] or "NA"),
+                        ("cookie_size_before", before[1]),
+                        ("cookie_mtime_after", after[0] or "NA"),
+                        ("cookie_size_after", after[1]),
+                        ("cookie_changed", str(changed).lower()),
+                    ])
+                else:
+                    strategy = "NETWORK_RETRY"
+
+            state["attempts"] = attempt
+            if state["first_strategy"] is None:
+                state["first_strategy"] = strategy
+            state["final_strategy"] = strategy
+
+            concurrency = TIKTOK_CONCURRENCY_STAGES[min(attempt - 1, len(TIKTOK_CONCURRENCY_STAGES) - 1)]
+
+            # 本次尝试实际使用的 Cookie 快照（下次 Session 刷新时用作 before）
+            last_snapshot = self._tiktok_cookie_snapshot()
+
+            cmd = self.build_ytdlp_args(
+                url,
+                job_dir,
+                ctx["ua"],
+                ctx["cookie_args"],
+                referer=ctx["referer"],
+                concurrency=concurrency
+            )
+
+            self.log("")
+            if attempt == 1:
+                self.log("开始下载：")
+            else:
+                self.log(f"TikTok 重试下载（第 {attempt} 次，上次错误：{last_kind}，-N {concurrency}）：")
+            self.log(url)
+
+            # 调试日志：本次尝试的策略（命令中的 Cookie/UA 真实值不落盘）
+            # Proxy 字段如实记录：明确传给 yt-dlp 的代理（不依赖系统代理 / TUN）
+            ytdlp_attempt_pairs = [
+                ("attempt", attempt),
+                ("max_attempts", TIKTOK_MAX_RETRIES),
+                ("cookie", "true" if ctx["cookie_args"] else "false"),
+                ("ua", "true" if ctx["ua"] else "false"),
+                ("referer", "true" if ctx["referer"] else "false"),
+                ("concurrency", concurrency),
+                ("strategy", strategy),
+            ]
+            if ctx.get("proxy"):
+                ptype, phost, pport = tiktok_parse_proxy(ctx["proxy"])
+                ytdlp_attempt_pairs.extend([
+                    ("proxy", "USED"),
+                    ("proxy_type", ptype),
+                    ("proxy_host", phost),
+                    ("proxy_port", pport),
+                ])
+            else:
+                ytdlp_attempt_pairs.append(("proxy", "DISABLED"))
+            tiktok_debug_section("YTDLP ATTEMPT", ytdlp_attempt_pairs, bordered=True)
+            ytdlp_cmd_pairs = [
+                ("cookies", "true" if ctx["cookie_args"] else "false"),
+                ("user_agent", "true"),
+                ("cookie_header", "REDACTED"),
+                ("referer", ctx["referer"] or "NA"),
+                ("concurrency", concurrency),
+            ]
+            if ctx.get("proxy"):
+                ytdlp_cmd_pairs.append(("proxy", ctx["proxy"]))
+            else:
+                ytdlp_cmd_pairs.append(("proxy", "NONE"))
+            tiktok_debug_section("YTDLP CMD", ytdlp_cmd_pairs)
+
+            tiktok_debug_section("RESOLVE", [("status", "START")])
+
+            ok, output_text = self._run_ytdlp(cmd)
+
+            if ok:
+                source = self.find_source_file(job_dir)
+                filesize = -1
+                if source is not None:
+                    try:
+                        filesize = source.stat().st_size
+                    except Exception:
+                        pass
+                state["resolve"] = "SUCCESS"
+                state["download"] = "SUCCESS"
+                tiktok_debug_section("RESOLVE", [("status", "SUCCESS")])
+                tiktok_debug_section("DOWNLOAD", [
+                    ("status", "SUCCESS"),
+                    ("filesize", filesize),
+                ])
+                self._tiktok_log_task_end(task_id, "SUCCESS", state, strategy, task_start)
+                return True
+
+            if self.stop_flag or self.skip_flag:
+                self._tiktok_log_task_end(task_id, "ABORTED", state, strategy, task_start)
+                return False
+
+            # 代理自身故障必须最先识别：代理不通时刷 Cookie / 降并发都没有意义，
+            # 且不能笼统记录为普通下载失败。
+            if self._is_tiktok_proxy_error(output_text):
+                ptype, phost, pport = tiktok_parse_proxy(TIKTOK_PROXY)
+                reason = self._tiktok_error_reason(output_text)
+                tiktok_debug_section("PROXY ERROR", [
+                    ("configured_proxy", TIKTOK_PROXY),
+                    ("proxy_type", ptype),
+                    ("host", phost),
+                    ("port", pport),
+                    ("reason", reason),
+                    ("error", self._tiktok_short_error(output_text)),
+                    ("hint", "v2rayN 未运行 / 端口不是 10808 / 代理节点不可达"),
+                ])
+                self.log(f"[TikTok] ⚠ 代理连接失败（{TIKTOK_PROXY}）：请确认 v2rayN 正在运行且混合端口为 10808")
+                self.log("[TikTok] 代理不通时继续重试没有意义，终止本任务")
+                tiktok_debug(
+                    "[YTDLP STDERR]",
+                    *output_text.splitlines()[-40:],
+                    ""
+                )
+                state["final_error_class"] = "PROXY"
+                state["final_error"] = f"Proxy connection failed ({TIKTOK_PROXY})"
+                self._tiktok_log_task_end(task_id, "FAILED", state, strategy, task_start)
+                return False
+            
+            last_kind = self._classify_tiktok_error(output_text)
+            error_class = last_kind.split("_")[0]  # SESSION / EXTRACTOR / NETWORK / UNKNOWN
+            reason = self._tiktok_error_reason(output_text)
+            short_error = self._tiktok_short_error(output_text)
+
+            resolve_status, download_status = self._tiktok_stage_from_output(output_text, ok)
+            state["resolve"] = resolve_status
+            state["download"] = download_status
+            state["final_error_class"] = error_class
+            state["final_error"] = short_error
+
+            # 严格区分 Resolve 失败与 Download 失败（两个阶段都必须留下记录）
+            if resolve_status == "FAILED":
+                tiktok_debug_section("RESOLVE", [
+                    ("status", "FAILED"),
+                    ("error_class", error_class),
+                    ("error", short_error),
+                ])
+                tiktok_debug_section("DOWNLOAD", [("status", "NOT_STARTED")])
+            else:
+                tiktok_debug_section("RESOLVE", [("status", "SUCCESS")])
+                tiktok_debug_section("DOWNLOAD", [
+                    ("status", download_status),
+                    ("error_class", error_class),
+                    ("error", short_error),
+                ])
+
+            # 失败必须落最后 40 行输出（真正有价值的诊断信息）
+            tiktok_debug(
+                "[YTDLP STDERR]",
+                *output_text.splitlines()[-40:],
+                ""
+            )
+
+            tiktok_debug_section("ERROR CLASSIFICATION", [
+                ("class", error_class),
+                ("reason", reason),
+            ])
+
+            if attempt >= TIKTOK_MAX_RETRIES:
+                break
+
+            if last_kind == "NETWORK_ERROR":
+                self.log("[TikTok] 疑似网络波动（保持 Cookie/UA 不变，降低并发重试）")
+            elif last_kind in ("SESSION_ERROR", "EXTRACTOR_ERROR"):
+                self.log("[TikTok] 疑似 Session/Cookie 失效，将重新读取扩展同步的 Cookie/UA 后重试")
+            else:
+                # UNKNOWN_ERROR：记录完整日志，不盲目刷新 Cookie，直接失败
+                self.log("[TikTok] 未知错误，不盲目刷新 Cookie，终止重试")
+                self.log("--- 错误输出（末尾 20 行） ---")
+                for line in output_text.splitlines()[-20:]:
+                    self.log(line)
+                self._tiktok_log_task_end(task_id, "FAILED", state, strategy, task_start)
+                return False
+
+            # 记录重试原因与下一次策略
+            next_strategy = (
+                "EXTENSION_COOKIE_REFRESH"
+                if last_kind in ("SESSION_ERROR", "EXTRACTOR_ERROR")
+                else "NETWORK_RETRY"
+            )
+            tiktok_debug_section("RETRY", [
+                ("attempt", attempt + 1),
+                ("reason", reason),
+                ("strategy", next_strategy),
+            ])
+
+        self.log("")
+        self.log(f"[TikTok] ⚠ 已尝试 {TIKTOK_MAX_RETRIES} 次仍然失败（最后一次：{last_kind}）")
+        self.log("[TikTok] 建议：在浏览器中打开并刷新 TikTok 页面，等扩展同步最新 Cookie 后，右键重试该链接")
+        self._tiktok_log_task_end(task_id, "FAILED", state, state["final_strategy"], task_start)
         return False
 
     def find_source_file(
@@ -6301,6 +6341,9 @@ def apply_application_style(
 def main():
 
     ensure_dirs()
+
+    # 启动时清空 TikTok 调试日志：只保留本轮运行的诊断信息，方便上传 GitHub 分析
+    init_tiktok_debug_log()
 
     app = QApplication(
         sys.argv
