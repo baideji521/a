@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>视频好帮手 — 扩展配对</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="card" id="card">
+        <p class="eyebrow">视频批量下载工具</p>
+
+        <header id="welcome-header" hidden>
+          <h1>视频好帮手</h1>
+          <p class="body">正在连接桌面应用…</p>
+        </header>
+
+        <header id="settings-header" hidden>
+          <h1>配对浏览器</h1>
+          <p class="body">
+            打开视频好帮手，进入 <strong>设置 → 网络 → 浏览器扩展</strong>，
+            点击 <strong>配对扩展</strong>，此页面会自动获取令牌。
+            或将 <em>令牌</em> 粘贴到下方输入框。
+          </p>
+        </header>
+
+        <div id="discovery-status" class="discovery" role="status" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="discovery-message">正在搜索本机上的桌面应用…</span>
+        </div>
+
+        <form id="pair-form" novalidate>
+          <label class="field">
+            <span class="label">配对令牌</span>
+            <input
+              id="token"
+              name="token"
+              type="password"
+              placeholder="粘贴令牌"
+              autocomplete="off"
+              spellcheck="false"
+              required
+            />
+            <button id="reveal" type="button" class="reveal" aria-pressed="false">
+              显示
+            </button>
+          </label>
+
+          <details id="advanced" class="advanced">
+            <summary>高级：更改端点 URL</summary>
+            <label class="field">
+              <span class="label">端点 URL</span>
+              <input
+                id="endpoint"
+                name="endpoint"
+                type="url"
+                placeholder="http://127.0.0.1:47720"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <span class="hint" id="endpoint-hint">默认：<code>http://127.0.0.1:47720</code></span>
+            </label>
+          </details>
+
+          <div class="actions">
+            <button id="pair-now" type="button" class="button primary">立即配对</button>
+            <button id="save" type="submit" class="button">保存</button>
+            <button id="test" type="button" class="button">测试连接</button>
+          </div>
+
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

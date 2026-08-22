@@ -1,0 +1,1144 @@
+import { extractCookiesForPlatform } from "./cookies.js";
+import { detectSupportedMediaUrl } from "./detect.js";
+import { createActionFeedbackController } from "./action-feedback.js";
+import { registerSnifferListeners, getMediaCount, getMediaCountForPage, getDetectedMedia, getDetectedMediaForUrl, getPageKeyForTab, restoreMedia } from "./media-sniffer.js";
+import { summarizeCookies } from "./cookie-summary.js";
+import { loadSnifferState, isSnifferEnabled, setSnifferEnabled } from "./sniffer-toggle.js";
+import { registerContextMenu, getContextMenuId, getCopyTitleMenuId } from "./context-menu.js";
+import { openVideoHelperScheme } from "./send-via-scheme.js";
+import {
+  sendViaBridge,
+  sendCookiesViaBridge,
+  autoPair,
+  loadBridgeConfig,
+  AUTOPAIR_ALARM_NAME,
+  STORAGE_KEY_TOKEN,
+} from "./bridge-client.js";
+
+const AUTOPAIR_ALARM = AUTOPAIR_ALARM_NAME;
+
+async function isPaired() {
+  try {
+    const cfg = await loadBridgeConfig();
+    return Boolean(cfg.token);
+  } catch {
+    return false;
+  }
+}
+
+// Keep a low-frequency poll alive while unpaired so that, the moment the user
+// clicks "Pair extension" in the desktop app (which opens a ~120s single-use
+// window), the extension grabs the token on its own — no copy-paste, no
+// returning to the extension. The alarm clears itself once paired.
+async function runAutoPairTick() {
+  if (await isPaired()) {
+    try {
+      await chrome.alarms.clear(AUTOPAIR_ALARM);
+    } catch {}
+    return true;
+  }
+  const result = await autoPair().catch(() => ({ ok: false }));
+  if (result?.ok) {
+    try {
+      await chrome.alarms.clear(AUTOPAIR_ALARM);
+    } catch {}
+    refreshActiveTab().catch(() => {});
+    // 配对成功后立即发送所有 Cookie
+    console.info("[视频好帮手] 配对成功，立即发送所有 Cookie");
+    void scanAllPlatformsForCookies();
+    return true;
+  }
+  return false;
+}
+
+async function ensureAutoPairAlarm() {
+  if (await isPaired()) return;
+  try {
+    if (!(await chrome.alarms.get(AUTOPAIR_ALARM))) {
+      chrome.alarms.create(AUTOPAIR_ALARM, { periodInMinutes: 1 });
+    }
+  } catch {}
+}
+
+if (chrome.alarms?.onAlarm) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm?.name === AUTOPAIR_ALARM) void runAutoPairTick();
+  });
+}
+
+// If the stored token is ever cleared (401 recovery in bridge-client.js, or
+// the user wiping it from the options page), go back to polling for a fresh
+// pairing window so the browser can re-pair without a reinstall.
+if (chrome.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") return;
+    const change = changes?.[STORAGE_KEY_TOKEN];
+    if (!change) return;
+    const newToken = typeof change.newValue === "string" ? change.newValue.trim() : "";
+    if (!newToken) void ensureAutoPairAlarm();
+  });
+}
+
+const INSTALL_URL = "https://github.com/tonhowtf/视频好帮手/releases/latest";
+const PROTOCOL_VERSION = 1;
+
+function getIconPath(iconSet) {
+  return {
+    16: chrome.runtime.getURL(iconSet[16]),
+    24: chrome.runtime.getURL(iconSet[24]),
+    32: chrome.runtime.getURL(iconSet[32]),
+    48: chrome.runtime.getURL(iconSet[48]),
+  };
+}
+
+const ACTIVE_ICON_PATHS = Object.freeze({
+  16: "icons/active-16.png",
+  24: "icons/active-24.png",
+  32: "icons/active-32.png",
+  48: "icons/active-48.png",
+});
+
+const INACTIVE_ICON_PATHS = Object.freeze({
+  16: "icons/inactive-16.png",
+  24: "icons/inactive-24.png",
+  32: "icons/inactive-32.png",
+  48: "icons/inactive-48.png",
+});
+
+const actionFeedback = createActionFeedbackController({
+  setBadgeText: (details) => chrome.action.setBadgeText(details),
+  setBadgeBackgroundColor: (details) => chrome.action.setBadgeBackgroundColor(details),
+});
+
+let snifferRegistered = false;
+
+loadSnifferState().then(async (enabled) => {
+  await restoreMedia();
+  if (enabled) {
+    registerSnifferListeners(onMediaDetected);
+    snifferRegistered = true;
+  }
+});
+
+chrome.runtime.onInstalled.addListener(async (details) => {
+  registerContextMenu();
+  refreshActiveTab().catch(() => {});
+  // Surface the pairing page on any install/update *if the user hasn't
+  // already paired this browser*. Reloading an unpacked extension fires
+  // `update`, not `install`, so gating only on `install` would silently
+  // skip the onboarding flow for dev builds and users coming from a
+  // pre-bridge 视频好帮手 version.
+  if (typeof chrome.runtime.openOptionsPage !== "function") return;
+  try {
+    const stored = await chrome.storage.local.get("bridge_token");
+    const token = typeof stored?.bridge_token === "string" ? stored.bridge_token.trim() : "";
+    if (!token) {
+      const paired = await runAutoPairTick();
+      if (!paired) {
+        await ensureAutoPairAlarm();
+        chrome.runtime.openOptionsPage().catch(() => {});
+      }
+    }
+  } catch {
+    // storage unavailable — fall back to the previous behaviour and only
+    // open on a real install.
+    if (details?.reason === "install") {
+      chrome.runtime.openOptionsPage().catch(() => {});
+    }
+  }
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  // ---- 查看/复制视频标题 ----
+  if (info.menuItemId === getCopyTitleMenuId()) {
+    await handleCopyVideoTitle(tab);
+    return;
+  }
+
+  // ---- 下载视频 ----
+  if (info.menuItemId !== getContextMenuId()) return;
+
+  const url = info.linkUrl || info.srcUrl;
+  if (!url) return;
+
+  const result = await handleSendToApp({
+    type: "sendTo视频好帮手",
+    url,
+    platform: "generic",
+    referer: tab?.url || "",
+  });
+
+  if (result.ok) {
+    actionFeedback.showSuccessBadge(tab?.id);
+  }
+});
+
+// ★ 绝招：background 直接 fetch 页面 HTML，提取 ytInitialData 中的视频标题
+async function fetchTitleFromServer(url, videoId) {
+  try {
+    console.log("[视频好帮手] fetchTitleFromServer:", url, "videoId:", videoId);
+
+    const resp = await fetch(url, {
+      credentials: "include",
+      headers: {
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+    console.log("[视频好帮手] fetch status:", resp.status, "ok:", resp.ok);
+    if (!resp.ok) return "";
+
+    const html = await resp.text();
+    console.log("[视频好帮手] HTML length:", html.length);
+
+    // === YouTube: ytInitialData ===
+    // 用括号计数法精确提取完整 JSON
+    let ytJson = "";
+    const ytStart = html.indexOf("var ytInitialData = ");
+    if (ytStart >= 0) {
+      const jsonStart = ytStart + "var ytInitialData = ".length;
+      let depth = 0;
+      let jsonEnd = jsonStart;
+      for (let i = jsonStart; i < html.length && i < jsonStart + 5000000; i++) {
+        if (html[i] === "{") depth++;
+        else if (html[i] === "}") { depth--; if (depth === 0) { jsonEnd = i + 1; break; } }
+      }
+      if (depth === 0 && jsonEnd > jsonStart) {
+        ytJson = html.substring(jsonStart, jsonEnd);
+        console.log("[视频好帮手] ytInitialData JSON length:", ytJson.length);
+      }
+    }
+
+    if (ytJson) {
+      try {
+        const data = JSON.parse(ytJson);
+        const text = JSON.stringify(data);
+        console.log("[视频好帮手] ytInitialData text length:", text.length);
+        const results = [];
+        const re = /"videoId"\s*:\s*"([\w-]{11})"/g;
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          const vid = m[1];
+          const ctx = text.substring(Math.max(0, m.index - 3000), Math.min(text.length, m.index + 3000));
+          const accMatch = ctx.match(/"accessibilityText"\s*:\s*"([^"]{5,500})"/);
+          if (accMatch) {
+            let t = accMatch[1].replace(/\\u0026/g, "&").replace(/\\u003c/g, "<");
+            t = t.replace(/,\s*[\d,.]+\s*(?:thousand|million|billion|K|M|B)?\s*views?.*/i, "").trim();
+            results.push({ videoId: vid, title: t });
+            continue;
+          }
+          const runMatch = ctx.match(/"title"\s*:\s*\{[^}]*"runs"\s*:\s*\[\s*\{[^}]*"text"\s*:\s*"([^"]+)"/);
+          if (runMatch) {
+            results.push({ videoId: vid, title: runMatch[1].replace(/\\u0026/g, "&") });
+            continue;
+          }
+          const stMatch = ctx.match(/"title"\s*:\s*\{[^}]*"simpleText"\s*:\s*"([^"]+)"/);
+          if (stMatch) {
+            results.push({ videoId: vid, title: stMatch[1].replace(/\\u0026/g, "&") });
+          }
+        }
+        console.log("[视频好帮手] YouTube titles found:", results.length);
+        if (results.length > 0) {
+          if (videoId) {
+            const exact = results.find(r => r.videoId === videoId);
+            if (exact) { console.log("[视频好帮手] exact match:", exact.title); return exact.title; }
+          }
+          console.log("[视频好帮手] first title:", results[0].title);
+          return results[0].title;
+        }
+      } catch (e) {
+        console.warn("[视频好帮手] ytInitialData parse error:", e.message);
+      }
+    } else {
+      console.log("[视频好帮手] ytInitialData NOT found in HTML");
+    }
+
+    // === TikTok ===
+    const ttMatch = html.match(/<script\s+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)<\/script>/s);
+    if (ttMatch) {
+      try {
+        const data = JSON.parse(ttMatch[1]);
+        const text = JSON.stringify(data);
+        const re = /"desc"\s*:\s*"([^"]{3,500})"/g;
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          const t = m[1].replace(/\\u0026/g, "&").replace(/\\n/g, " ");
+          console.log("[视频好帮手] TikTok title:", t);
+          return t;
+        }
+      } catch {}
+    }
+    const sigiMatch = html.match(/<script\s+id="SIGI_STATE"[^>]*>(.*?)<\/script>/s);
+    if (sigiMatch) {
+      try {
+        const data = JSON.parse(sigiMatch[1]);
+        const text = JSON.stringify(data);
+        const re = /"desc"\s*:\s*"([^"]{3,500})"/g;
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          return m[1].replace(/\\u0026/g, "&").replace(/\\n/g, " ");
+        }
+      } catch {}
+    }
+    console.log("[视频好帮手] No title found in server HTML");
+    return "";
+  } catch (e) {
+    console.error("[视频好帮手] fetchTitleFromServer ERROR:", e?.message || e);
+    return "";
+  }
+}
+
+// 从页面上下文读取（world: MAIN）— 直接读取 window.ytInitialData
+async function extractTitleFromPageContext(tabId, videoId) {
+  try {
+    console.log("[视频好帮手] extractTitleFromPageContext tabId:", tabId, "videoId:", videoId || "(空)");
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (targetVid) => {
+        console.log("[视频好帮手] MAIN script 执行, ytInitialData:", typeof window.ytInitialData);
+        if (window.ytInitialData) {
+          try {
+            const text = JSON.stringify(window.ytInitialData);
+            console.log("[视频好帮手] ytInitialData text length:", text.length);
+            const results = [];
+            const re = /"videoId"\s*:\s*"([\w-]{11})"/g;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+              const vid = m[1];
+              const ctx = text.substring(Math.max(0, m.index - 2000), Math.min(text.length, m.index + 2000));
+              const a = ctx.match(/"accessibilityText"\s*:\s*"([^"]{5,500})"/);
+              if (a) { let t = a[1].replace(/\\u0026/g,"&"); t = t.replace(/,\s*[\d,.]+\s*(?:thousand|million|billion|K|M|B)?\s*views?.*/i,"").trim(); results.push({videoId:vid,title:t}); continue; }
+              const r = ctx.match(/"title"\s*:\s*\{[^}]*"runs"\s*:\s*\[\s*\{[^}]*"text"\s*:\s*"([^"]+)"/);
+              if (r) { results.push({videoId:vid,title:r[1].replace(/\\u0026/g,"&")}); continue; }
+              const st = ctx.match(/"title"\s*:\s*\{[^}]*"simpleText"\s*:\s*"([^"]+)"/);
+              if (st) { results.push({videoId:vid,title:st[1].replace(/\\u0026/g,"&")}); }
+            }
+            console.log("[视频好帮手] MAIN titles found:", results.length);
+            if (results.length > 0) {
+              if (targetVid) { const ex = results.find(r => r.videoId === targetVid); if (ex) return ex.title; }
+              return results[0]?.title || "";
+            }
+          } catch (e) { console.log("[视频好帮手] MAIN parse error:", e.message); }
+        }
+        // TikTok
+        try {
+          const el = document.getElementById("__UNIVERSAL_DATA_FOR_REHYDRATION__");
+          if (el) {
+            const data = JSON.parse(el.textContent);
+            const text = JSON.stringify(data);
+            const re = /"desc"\s*:\s*"([^"]{3,500})"/g;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+              return m[1].replace(/\\u0026/g, "&").replace(/\\n/g, " ");
+            }
+          }
+        } catch {}
+        return "";
+      },
+      args: [videoId || null],
+    });
+    const result = results?.[0]?.result || "";
+    console.log("[视频好帮手] extractTitleFromPageContext result:", (result || "(空)").substring(0, 80));
+    return result;
+  } catch (e) {
+    console.error("[视频好帮手] extractTitleFromPageContext ERROR:", e?.message || e);
+    return "";
+  }
+}
+
+// 处理"查看视频标题"右键菜单点击
+async function handleCopyVideoTitle(tab) {
+  if (!tab?.id) return;
+  let title = "";
+  let videoId = "";
+
+  // 方案1: 向内容脚本获取 videoId（右键时通过 composedPath 捕获）
+  try {
+    const response = await chrome.tabs.sendMessage(tab.id, { type: "getVideoTitle" });
+    title = response?.title || "";
+    videoId = response?.videoId || "";
+    console.log("[视频好帮手] 方案1 内容脚本返回 title:", (title || "(空)").substring(0, 50), "videoId:", videoId || "(空)");
+  } catch (e) {
+    console.log("[视频好帮手] 方案1 内容脚本通信失败:", e?.message || e);
+  }
+
+  // ★ 方案2（核心）: chrome.scripting.executeScript + world:MAIN
+  // 直接读取 window.ytInitialData / TikTok 数据，完全绕过 CSP
+  if (!title) {
+    title = await extractTitleFromPageContext(tab.id, videoId);
+    console.log("[视频好帮手] 方案2 world:MAIN 返回:", (title || "(空)").substring(0, 80));
+  }
+
+  // 方案3: background fetch 页面 HTML
+  if (!title && tab.url) {
+    title = await fetchTitleFromServer(tab.url, videoId);
+    console.log("[视频好帮手] 方案3 fetch 返回:", (title || "(空)").substring(0, 80));
+  }
+
+  // 方案4: 最终兜底用 tab.title
+  if (!title) {
+    title = tab.title || "未找到视频标题";
+    console.log("[视频好帮手] 方案4 兆底 tab.title:", title.substring(0, 80));
+  }
+
+  showTitleDialog(tab, title);
+}
+
+// 显示标题对话框（带复制功能）— 注入页面内自定义对话框
+function showTitleDialog(tab, title) {
+  chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: (t) => {
+      // 清除已有对话框
+      const old = document.getElementById("__og-title-dlg");
+      if (old) old.remove();
+
+      const overlay = document.createElement("div");
+      overlay.id = "__og-title-dlg";
+      overlay.innerHTML = `
+        <style>
+          #__og-title-dlg{position:fixed;top:0;left:0;width:100%;height:100%;
+            background:rgba(0,0,0,.55);z-index:2147483647;display:flex;
+            align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif}
+          #__og-title-dlg .og-dlg{background:#fff;border-radius:14px;padding:24px 28px;
+            max-width:520px;min-width:320px;width:90%;box-shadow:0 12px 40px rgba(0,0,0,.35);
+            position:relative;animation:og-dlg-in .2s ease-out}
+          @keyframes og-dlg-in{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+          #__og-title-dlg .og-dlg-hd{font-size:15px;font-weight:600;color:#333;
+            margin-bottom:14px;display:flex;align-items:center;gap:8px}
+          #__og-title-dlg .og-dlg-hd::before{content:"🎬";font-size:18px}
+          #__og-title-dlg .og-dlg-tt{background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;
+            padding:12px 14px;font-size:14px;line-height:1.6;color:#222;width:100%;
+            box-sizing:border-box;resize:vertical;min-height:48px;max-height:200px;
+            font-family:inherit;outline:none;transition:border-color .15s}
+          #__og-title-dlg .og-dlg-tt:focus{border-color:#4285f4;background:#fafcff}
+          #__og-title-dlg .og-dlg-bt{display:flex;gap:10px;margin-top:16px;justify-content:flex-end}
+          #__og-title-dlg .og-cp{background:#4285f4;color:#fff;border:none;border-radius:8px;
+            padding:9px 22px;font-size:14px;cursor:pointer;font-weight:500;
+            transition:background .15s}
+          #__og-title-dlg .og-cp:hover{background:#3367d6}
+          #__og-title-dlg .og-cl{background:#f1f3f4;color:#555;border:none;border-radius:8px;
+            padding:9px 22px;font-size:14px;cursor:pointer;transition:background .15s}
+          #__og-title-dlg .og-cl:hover{background:#e2e3e5}
+        </style>
+        <div class="og-dlg">
+          <div class="og-dlg-hd">视频标题 - 视频好帮手</div>
+          <textarea class="og-dlg-tt" readonly></textarea>
+          <div class="og-dlg-bt">
+            <button class="og-cl" id="__og-dlg-close">关闭</button>
+            <button class="og-cp" id="__og-dlg-copy">复制标题</button>
+          </div>
+        </div>
+      `;
+
+      // 设置标题文本（安全方式，避免 HTML 注入）
+      const textarea = overlay.querySelector(".og-dlg-tt");
+      textarea.value = t;
+
+      // 关闭逻辑
+      const close = () => overlay.remove();
+      overlay.querySelector("#__og-dlg-close").addEventListener("click", close);
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+      document.addEventListener("keydown", function esc(e) {
+        if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
+      });
+
+      // 复制逻辑
+      overlay.querySelector("#__og-dlg-copy").addEventListener("click", async () => {
+        const btn = overlay.querySelector("#__og-dlg-copy");
+        textarea.readOnly = false;
+        textarea.focus();
+        textarea.select();
+        try {
+          await navigator.clipboard.writeText(t);
+          btn.textContent = "已复制 ✓";
+          btn.style.background = "#34a853";
+        } catch {
+          try {
+            document.execCommand("copy");
+            btn.textContent = "已复制 ✓";
+            btn.style.background = "#34a853";
+          } catch {
+            btn.textContent = "请手动 Ctrl+C";
+          }
+        }
+        textarea.readOnly = true;
+        setTimeout(() => {
+          btn.textContent = "复制标题";
+          btn.style.background = "#4285f4";
+        }, 2000);
+      });
+
+      document.body.appendChild(overlay);
+      textarea.focus();
+      textarea.select();
+    },
+    args: [title],
+  }).catch((e) => {
+    console.error("[视频好帮手] showTitleDialog inject failed:", e);
+    // 最终兜底：使用通知
+    const notifId = `title-${Date.now()}`;
+    chrome.storage?.local?.set({ ["__og_title_clipboard"]: title }).catch(() => {});
+    chrome.notifications?.create(notifId, {
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("icons/active-128.png"),
+      title: "视频标题 - 视频好帮手",
+      message: title,
+      buttons: [{ title: "复制标题" }],
+      requireInteraction: false,
+    }).catch(() => {});
+  });
+}
+
+// 处理通知按钮点击（复制标题）
+if (chrome.notifications?.onButtonClicked) {
+  chrome.notifications.onButtonClicked.addListener(async (notifId, btnIdx) => {
+    if (!notifId?.startsWith("title-")) return;
+    if (btnIdx === 0) {
+      // 复制按钮
+      try {
+        const data = await chrome.storage?.local?.get("__og_title_clipboard");
+        const title = data?.__og_title_clipboard || "";
+        if (!title) return;
+        // 优先用 service worker 的 clipboard API
+        try {
+          await navigator.clipboard.writeText(title);
+        } catch {
+          // 回退：通过 content script 复制
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tab?.id) {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: (text) => { navigator.clipboard.writeText(text); },
+              args: [title],
+            });
+          }
+        }
+      } catch {}
+    }
+  });
+}
+
+chrome.runtime.onStartup.addListener(() => {
+  refreshActiveTab().catch(() => {});
+  void runAutoPairTick();
+  void ensureAutoPairAlarm();
+});
+
+if (chrome.commands && chrome.commands.onCommand) {
+  chrome.commands.onCommand.addListener(async (command) => {
+    if (command !== "send-to-视频好帮手") return;
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.url) return;
+      const detected = detectSupportedMediaUrl(tab.url);
+      if (detected?.supported) {
+        const result = await handleSendToApp({
+          type: "sendTo视频好帮手",
+          url: tab.url,
+          platform: detected.platform,
+          referer: tab.url,
+        });
+        if (result?.ok && tab.id !== undefined) {
+          actionFeedback.showSuccessBadge(tab.id);
+        }
+        return;
+      }
+      if (chrome.action && typeof chrome.action.openPopup === "function") {
+        try { await chrome.action.openPopup(); } catch {}
+      }
+    } catch (error) {
+      console.error("[视频好帮手] command handler failed:", error);
+    }
+  });
+}
+
+chrome.tabs.onActivated.addListener(() => {
+  refreshActiveTab().catch(() => {});
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!changeInfo.url && !changeInfo.status) {
+    return;
+  }
+  if (!tab?.url) {
+    return;
+  }
+  refreshTabAction(tabId, tab).catch((error) => {
+    console.error("[视频好帮手] Failed to refresh tab action:", error);
+  });
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+    refreshActiveTab().catch(() => {});
+  }
+});
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === "getDetectedMedia") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tabId = tabs[0]?.id;
+      const pageUrl = tabs[0]?.url;
+      if (!tabId) { sendResponse({ media: [], snifferEnabled: isSnifferEnabled() }); return; }
+
+      const media = pageUrl
+        ? getDetectedMediaForUrl(pageUrl)
+        : getDetectedMedia(tabId);
+      const list = Array.from(media.values()).sort((a, b) => b.detectedAt - a.detectedAt);
+
+      const pageDetected = detectSupportedMediaUrl(pageUrl);
+
+      sendResponse({
+        media: list,
+        pageDetected,
+        snifferEnabled: isSnifferEnabled(),
+        tabUrl: pageUrl,
+      });
+    });
+    return true;
+  }
+
+  if (msg.type === "toggleSniffer") {
+    setSnifferEnabled(msg.enabled).then((result) => {
+      const effective = isSnifferEnabled();
+      if (effective && !snifferRegistered) {
+        registerSnifferListeners(onMediaDetected);
+        snifferRegistered = true;
+      }
+      sendResponse({
+        ok: result?.ok !== false,
+        enabled: effective,
+        reason: result?.reason,
+      });
+    });
+    return true;
+  }
+
+  if (msg.type === "sendTo视频好帮手") {
+    handleSendToApp(msg).then(sendResponse);
+    return true;
+  }
+
+  // Content script 请求在 MAIN world 注入网络拦截代码
+  if (msg.type === "injectNetworkInterceptor") {
+    const tabId = sender.tab?.id;
+    if (!tabId) { sendResponse({ ok: false }); return true; }
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: () => {
+        if (window.__ogNetIntercepted) return;
+        window.__ogNetIntercepted = true;
+        const origFetch = window.fetch;
+        window.fetch = function() {
+          const url = arguments[0]?.url || arguments[0] || '';
+          return origFetch.apply(this, arguments).then(resp => {
+            try {
+              const clone = resp.clone();
+              clone.text().then(text => {
+                if (text.length > 500 && (text.includes('"videoId"') || text.includes('"playAddr"'))) {
+                  window.dispatchEvent(new CustomEvent('__og-net', { detail: text.substring(0, 50000) }));
+                }
+              }).catch(()=>{});
+            } catch(e){}
+            return resp;
+          });
+        };
+        const origOpen = XMLHttpRequest.prototype.open;
+        const origSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function() { this.__og_url = arguments[1] || ''; return origOpen.apply(this, arguments); };
+        XMLHttpRequest.prototype.send = function() {
+          this.addEventListener('load', function() {
+            try {
+              const t = this.responseText;
+              if (t && t.length > 500 && (t.includes('"videoId"') || t.includes('"playAddr"'))) {
+                window.dispatchEvent(new CustomEvent('__og-net', { detail: t.substring(0, 50000) }));
+              }
+            } catch(e){}
+          });
+          return origSend.apply(this, arguments);
+        };
+      },
+    }).then(() => sendResponse({ ok: true })).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+
+  // Content script 请求读取 ytInitialData 中的 videoId 列表
+  if (msg.type === "scanYtInternalState") {
+    const tabId = sender.tab?.id;
+    if (!tabId) { sendResponse({ ids: [] }); return true; }
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: () => {
+        try {
+          if (!window.ytInitialData) return [];
+          const json = JSON.stringify(window.ytInitialData);
+          const m = json.match(/"videoId":"([\w-]{11})"/g);
+          if (!m) return [];
+          return [...new Set(m.map(x => x.match(/"([\w-]{11})"/)[1]))];
+        } catch { return []; }
+      },
+    }).then((results) => {
+      const ids = results?.[0]?.result || [];
+      sendResponse({ ids });
+    }).catch(() => sendResponse({ ids: [] }));
+    return true;
+  }
+
+  // Content script 请求从页面上下文读取视频标题
+  if (msg.type === "readPageTitle") {
+    const tabId = sender.tab?.id;
+    const videoId = msg.videoId || "";
+    const eventName = msg.eventName || "";
+    if (!tabId || !eventName) { sendResponse({ ok: false }); return true; }
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (vid, evtName) => {
+        try {
+          var t = "";
+          if (window.ytInitialData) {
+            var s = JSON.stringify(window.ytInitialData);
+            var re = /"videoId"\s*:\s*"([\w-]{11})"/g;
+            var m, results = [];
+            while ((m = re.exec(s)) !== null) {
+              var v = m[1], c = s.substring(Math.max(0, m.index - 2000), Math.min(s.length, m.index + 2000));
+              var a = c.match(/"accessibilityText"\s*:\s*"([^"]{5,500})"/);
+              if (a) { var x = a[1].replace(/\\u0026/g, "&").replace(/\\u003c/g, "<"); x = x.replace(/,\s*[\d,.]+\s*(?:thousand|million|billion|K|M|B)?\s*views?.*/i, "").trim(); results.push({ v: v, t: x }); continue; }
+              var r = c.match(/"title"\s*:\s*\{[^}]*"runs"\s*:\s*\[\s*\{[^}]*"text"\s*:\s*"([^"]+)"/);
+              if (r) { results.push({ v: v, t: r[1].replace(/\\u0026/g, "&") }); continue; }
+              var st = c.match(/"title"\s*:\s*\{[^}]*"simpleText"\s*:\s*"([^"]+)"/);
+              if (st) { results.push({ v: v, t: st[1].replace(/\\u0026/g, "&") }); }
+            }
+            if (results.length > 0) {
+              if (vid) { var ex = results.find(function(r) { return r.v === vid; }); if (ex) t = ex.t; }
+              if (!t) t = results[0].t;
+            }
+          }
+          if (!t) {
+            var el = document.getElementById("__UNIVERSAL_DATA_FOR_REHYDRATION__");
+            if (el) { var d = JSON.parse(el.textContent), s2 = JSON.stringify(d); var re2 = /"desc"\s*:\s*"([^"]{3,500})"/g, m2; while ((m2 = re2.exec(s2)) !== null) { t = m2[1].replace(/\\u0026/g, "&").replace(/\\n/g, " "); break; } }
+          }
+          window.dispatchEvent(new CustomEvent(evtName, { detail: t }));
+        } catch (e) { window.dispatchEvent(new CustomEvent(evtName, { detail: "" })); }
+      },
+      args: [videoId, eventName],
+    }).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+});
+
+function onMediaDetected(tabId, _entry) {
+  if (!isSnifferEnabled()) return;
+  updateBadge(tabId);
+  const pageKey = getPageKeyForTab(tabId);
+  if (!pageKey) return;
+  const count = getMediaCountForPage(pageKey);
+  chrome.runtime.sendMessage({
+    type: "media-detected",
+    pageKey,
+    count,
+  }).catch(() => {});
+}
+
+function updateBadge(tabId) {
+  const count = getMediaCount(tabId);
+  chrome.action.setBadgeText({
+    tabId,
+    text: count > 0 ? String(count) : "",
+  }).catch(() => {});
+  chrome.action.setBadgeBackgroundColor({
+    tabId,
+    color: "#F04E23",
+  }).catch(() => {});
+}
+
+async function handleSendToApp(msg) {
+  const url = msg.url;
+  const platform = msg.platform || "generic";
+
+  let pageTitle = "";
+  let pageThumbnail = "";
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    pageTitle = tab?.title || "";
+    pageThumbnail = tab?.favIconUrl || "";
+  } catch {}
+
+  let cookies = null;
+  try {
+    // 获取浏览器全部 Cookie（不分类，统一发送）
+    const allCookies = await chrome.cookies.getAll({});
+    if (allCookies && allCookies.length > 0) {
+      cookies = allCookies.map(c => ({
+        domain: c.domain,
+        httpOnly: c.httpOnly,
+        path: c.path,
+        secure: c.secure,
+        expires: c.expirationDate ? Math.floor(c.expirationDate) : 0,
+        name: c.name,
+        value: c.value,
+        hostOnly: c.hostOnly,
+        sameSite: c.sameSite,
+      }));
+    }
+  } catch {}
+
+  const message = { type: "enqueue", url, protocolVersion: PROTOCOL_VERSION };
+  if (cookies) message.cookies = cookies;
+  if (msg.referer) message.referer = msg.referer;
+  if (msg.title) message.title = msg.title;
+  else if (pageTitle) message.title = pageTitle;
+  if (msg.thumbnail) message.thumbnail = msg.thumbnail;
+  else if (pageThumbnail) message.thumbnail = pageThumbnail;
+  if (msg.mediaType) message.mediaType = msg.mediaType;
+  if (msg.contentType) message.contentType = msg.contentType;
+  if (msg.headers) message.headers = msg.headers;
+  if (typeof msg.openApp === "boolean") message.openApp = msg.openApp;
+  message.pageUrl = msg.referer || "";
+  message.userAgent = navigator.userAgent;
+
+  try {
+    await chrome.storage.local.set({
+      last_download_metadata: {
+        url,
+        referer: msg.referer || "",
+        headers: msg.headers || {},
+        cookies: cookies || [],
+        userAgent: navigator.userAgent,
+        timestamp: Date.now(),
+      },
+    }).catch(() => {});
+  } catch {}
+
+  const cookieSummary = summarizeCookies(cookies);
+
+  // Primary path: localhost HTTP bridge (no extension-ID dependency, full
+  // cookie + metadata payload).
+  const bridgeResult = await sendViaBridge(message);
+  if (bridgeResult?.ok) {
+    return { ok: true, viaBridge: true, cookieSummary };
+  }
+
+  // Fallback: 视频好帮手:// scheme handler. The desktop app is launched (or
+  // brought to focus) and the URL is queued, but cookies aren't forwarded
+  // — the user can pair the bridge from the extension's options page to
+  // get the full experience.
+  const schemeResult = await openVideoHelperScheme(url);
+  if (schemeResult?.ok) {
+    return { ok: true, viaScheme: true, cookieSummary, bridgeReason: bridgeResult?.reason };
+  }
+  return {
+    ok: false,
+    error: bridgeResult?.message || schemeResult?.message || "视频好帮手 is not reachable",
+    bridgeReason: bridgeResult?.reason,
+    schemeReason: schemeResult?.reason,
+  };
+}
+
+async function refreshActiveTab() {
+  const [tab] = await chrome.tabs.query({
+    active: true,
+    lastFocusedWindow: true,
+  });
+
+  if (tab?.id !== undefined) {
+    await refreshTabAction(tab.id, tab);
+  }
+}
+
+async function refreshTabAction(tabId, tab) {
+  if (!tab?.url) {
+    return;
+  }
+
+  const detected = detectSupportedMediaUrl(tab.url);
+  const supported = Boolean(detected?.supported);
+  const mediaCount = getMediaCount(tabId);
+
+  try {
+    const iconSet = supported ? ACTIVE_ICON_PATHS : INACTIVE_ICON_PATHS;
+    await chrome.action.setIcon({ tabId, path: getIconPath(iconSet) });
+  } catch (error) {
+    if (isTabGoneError(error)) return;
+  }
+
+  if (mediaCount > 0) {
+    updateBadge(tabId);
+  } else {
+    try { await actionFeedback.clearBadge(tabId); } catch {}
+  }
+}
+
+function isTabGoneError(error) {
+  const msg = error instanceof Error ? error.message : String(error);
+  return msg.includes("No tab with id");
+}
+
+const COOKIE_AUTO_CAPTURE_DEBOUNCE_MS = 1500;
+const COOKIE_AUTO_CAPTURE_MIN_INTERVAL_MS = 60_000;
+const cookieDebounceTimers = new Map();
+const cookieLastSentAt = new Map();
+
+const TRACKED_COOKIE_NAMES = new Set([
+  "__Secure-3PAPISID",
+  "__Secure-1PAPISID",
+  "__Secure-3PSID",
+  "__Secure-1PSID",
+  "SAPISID",
+  "SID",
+  "HSID",
+  "SSID",
+  "APISID",
+  "LOGIN_INFO",
+  "VISITOR_INFO1_LIVE",
+  "PREF",
+  "sessionid",
+  "ds_user_id",
+  "ig_did",
+  "auth_token",
+  "ct0",
+  "kp",
+  "tt_webid",
+  "twid",
+  "loid",
+  "edgebucket",
+  "oauth_token",
+  "sc_anonymous_id",
+  "moe_uuid",
+  "datadome",
+]);
+
+const TRACKED_DOMAIN_SUFFIXES = [
+  ".youtube.com",
+  ".google.com",
+  ".instagram.com",
+  ".tiktok.com",
+  ".x.com",
+  ".twitter.com",
+  ".reddit.com",
+  ".twitch.tv",
+  ".vimeo.com",
+  ".bilibili.com",
+  ".pinterest.com",
+  ".hotmart.com",
+  ".udemy.com",
+  ".bsky.app",
+  ".bsky.social",
+  ".telegram.org",
+  ".soundcloud.com",
+];
+
+function platformForDomain(domain) {
+  const d = (domain || "").toLowerCase();
+  if (d.endsWith(".youtube.com") || d.endsWith(".google.com") || d === "youtube.com")
+    return "youtube";
+  if (d.endsWith(".instagram.com") || d.endsWith(".cdninstagram.com")) return "instagram";
+  if (d.endsWith(".tiktok.com")) return "tiktok";
+  if (d.endsWith(".x.com") || d.endsWith(".twitter.com")) return "twitter";
+  if (d.endsWith(".reddit.com")) return "reddit";
+  if (d.endsWith(".twitch.tv")) return "twitch";
+  if (d.endsWith(".vimeo.com")) return "vimeo";
+  if (d.endsWith(".bilibili.com")) return "bilibili";
+  if (d.endsWith(".pinterest.com")) return "pinterest";
+  if (d.endsWith(".hotmart.com")) return "hotmart";
+  if (d.endsWith(".udemy.com")) return "udemy";
+  if (d.endsWith(".bsky.app") || d.endsWith(".bsky.social")) return "bluesky";
+  if (d.endsWith(".telegram.org")) return "telegram";
+  if (d.endsWith(".soundcloud.com") || d === "soundcloud.com") return "soundcloud";
+  return null;
+}
+
+function shouldTrackCookieDomain(domain) {
+  if (!domain) return false;
+  const d = domain.toLowerCase();
+  for (const suffix of TRACKED_DOMAIN_SUFFIXES) {
+    if (d === suffix.slice(1) || d.endsWith(suffix)) return true;
+  }
+  return false;
+}
+
+function debounceCookieCapture(platform) {
+  if (cookieDebounceTimers.has(platform)) {
+    clearTimeout(cookieDebounceTimers.get(platform));
+  }
+  const timer = setTimeout(() => {
+    cookieDebounceTimers.delete(platform);
+    void capturePlatformCookies(platform);
+  }, COOKIE_AUTO_CAPTURE_DEBOUNCE_MS);
+  cookieDebounceTimers.set(platform, timer);
+}
+
+async function capturePlatformCookies(platform, force = false) {
+  const lastSent = cookieLastSentAt.get("__all__") || 0;
+  if (!force && Date.now() - lastSent < COOKIE_AUTO_CAPTURE_MIN_INTERVAL_MS) {
+    console.debug("[视频好帮手] cookie capture throttled");
+    return { ok: false, reason: "throttled" };
+  }
+  cookieLastSentAt.set("__all__", Date.now());
+
+  let allCookies = [];
+  try {
+    allCookies = await chrome.cookies.getAll({});
+  } catch (e) {
+    console.warn("[视频好帮手] cookie extract failed:", e);
+    return { ok: false, reason: "extract_failed" };
+  }
+  if (!allCookies || allCookies.length === 0) {
+    console.debug("[视频好帮手] no cookies found");
+    return { ok: false, reason: "no_cookies" };
+  }
+
+  const cookies = allCookies.map(c => ({
+    domain: c.domain,
+    httpOnly: c.httpOnly,
+    path: c.path,
+    secure: c.secure,
+    expires: c.expirationDate ? Math.floor(c.expirationDate) : 0,
+    name: c.name,
+    value: c.value,
+    hostOnly: c.hostOnly,
+    sameSite: c.sameSite,
+  }));
+
+  const response = await sendCookiesViaBridge(cookies, { userAgent: navigator.userAgent });
+  if (response.ok) {
+    console.info("[视频好帮手] all cookies exported:", cookies.length);
+    return { ok: true, count: cookies.length };
+  }
+  console.warn("[视频好帮手] cookie export failed:", response.reason ?? response.message);
+  return { ok: false, reason: response.reason ?? "bridge_failed" };
+}
+
+async function scanOpenTabsForCookies() {
+  if (!chrome.tabs?.query) return;
+  try {
+    const tabs = await chrome.tabs.query({});
+    const seen = new Set();
+    for (const tab of tabs) {
+      if (!tab.url) continue;
+      let host;
+      try {
+        host = new URL(tab.url).hostname;
+      } catch {
+        continue;
+      }
+      const platform = platformForDomain(host);
+      if (!platform || seen.has(platform)) continue;
+      seen.add(platform);
+      void capturePlatformCookies(platform, true);
+    }
+    if (seen.size === 0) {
+      console.info("[视频好帮手] no tracked tabs open at extension load");
+    }
+  } catch (e) {
+    console.warn("[视频好帮手] scan tabs failed", e);
+  }
+}
+
+// Scan every tracked platform — useful when the user logged into a service
+// before installing the extension (no cookies.onChanged event was ever fired
+// for that login, and they may not have a tab open right now).
+async function scanAllPlatformsForCookies() {
+  if (!chrome.cookies?.getAll) return;
+  const allPlatforms = [
+    "youtube",
+    "instagram",
+    "tiktok",
+    "twitter",
+    "reddit",
+    "twitch",
+    "vimeo",
+    "bilibili",
+    "soundcloud",
+    "pinterest",
+    "hotmart",
+    "udemy",
+    "bluesky",
+    "telegram",
+  ];
+  for (const platform of allPlatforms) {
+    try {
+      void capturePlatformCookies(platform, true);
+    } catch (e) {
+      console.warn(`[视频好帮手] proactive capture ${platform} failed`, e);
+    }
+  }
+}
+
+scanOpenTabsForCookies();
+// Also do a proactive sweep for users who logged in BEFORE installing the
+// extension (cookies.onChanged never fired, no tab open) — covers SoundCloud,
+// YouTube etc. when the user already had a session in their browser.
+scanAllPlatformsForCookies();
+
+if (chrome.runtime?.onStartup) {
+  chrome.runtime.onStartup.addListener(() => {
+    void scanOpenTabsForCookies();
+    void scanAllPlatformsForCookies();
+    void ensureCookieRefreshAlarm();
+  });
+}
+if (chrome.runtime?.onInstalled) {
+  chrome.runtime.onInstalled.addListener(() => {
+    void scanAllPlatformsForCookies();
+    void ensureCookieRefreshAlarm();
+  });
+}
+
+// ---- 定时 Cookie 自动刷新（每 2 分钟） ----
+const COOKIE_REFRESH_ALARM = "视频好帮手-cookie-refresh";
+const COOKIE_REFRESH_INTERVAL_MIN = 2;
+
+async function ensureCookieRefreshAlarm() {
+  try {
+    // 先清除旧的
+    await chrome.alarms.clear(COOKIE_REFRESH_ALARM).catch(() => {});
+    chrome.alarms.create(COOKIE_REFRESH_ALARM, {
+      periodInMinutes: COOKIE_REFRESH_INTERVAL_MIN,
+    });
+    console.info(`[视频好帮手] Cookie 自动刷新已启用（每 ${COOKIE_REFRESH_INTERVAL_MIN} 分钟）`);
+  } catch (e) {
+    console.warn("[视频好帮手] 创建 Cookie 刷新闹钟失败", e);
+  }
+}
+
+if (chrome.alarms?.onAlarm) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm?.name === COOKIE_REFRESH_ALARM) {
+      console.info("[视频好帮手] 定时 Cookie 刷新触发");
+      void scanAllPlatformsForCookies();
+    }
+  });
+}
+
+if (chrome.cookies?.onChanged) {
+  chrome.cookies.onChanged.addListener((change) => {
+    const cookie = change.cookie;
+    if (!cookie) return;
+    if (!TRACKED_COOKIE_NAMES.has(cookie.name)) return;
+    if (!shouldTrackCookieDomain(cookie.domain)) return;
+    const platform = platformForDomain(cookie.domain);
+    if (!platform) return;
+    debounceCookieCapture(platform);
+  });
+}
+
+if (chrome.tabs?.onUpdated) {
+  chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+    if (changeInfo.status !== "complete") return;
+    if (!tab?.url) return;
+    let host;
+    try {
+      host = new URL(tab.url).hostname;
+    } catch {
+      return;
+    }
+    if (!shouldTrackCookieDomain(host)) return;
+    const platform = platformForDomain(host);
+    if (!platform) return;
+    debounceCookieCapture(platform);
+  });
+}
