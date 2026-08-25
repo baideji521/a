@@ -4,7 +4,7 @@ import { createActionFeedbackController } from "./action-feedback.js";
 import { registerSnifferListeners, getMediaCount, getMediaCountForPage, getDetectedMedia, getDetectedMediaForUrl, getPageKeyForTab, restoreMedia } from "./media-sniffer.js";
 import { summarizeCookies } from "./cookie-summary.js";
 import { loadSnifferState, isSnifferEnabled, setSnifferEnabled } from "./sniffer-toggle.js";
-import { registerContextMenu, getContextMenuId, getCopyTitleMenuId } from "./context-menu.js";
+import { registerContextMenu, getContextMenuId, getTikTokSearchMenuId, getCopyUrlMenuId, getCopyTitleMenuId } from "./context-menu.js";
 import { openVideoHelperScheme } from "./send-via-scheme.js";
 import {
   sendViaBridge,
@@ -14,6 +14,9 @@ import {
   AUTOPAIR_ALARM_NAME,
   STORAGE_KEY_TOKEN,
 } from "./bridge-client.js";
+// Google Lens 图片反向搜索任务处理器（新增，与下载链路互不影响）
+import { startLensPolling, resumeLensPolling, LENS_POLL_ALARM } from "./lens-task.js";
+
 
 const AUTOPAIR_ALARM = AUTOPAIR_ALARM_NAME;
 
@@ -149,6 +152,18 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  // ---- TikTok搜索 ----
+  if (info.menuItemId === getTikTokSearchMenuId()) {
+    await handleTikTokSearch(tab);
+    return;
+  }
+
+  // ---- 复制当前视频地址 ----
+  if (info.menuItemId === getCopyUrlMenuId()) {
+    await handleCopyVideoUrl(info, tab);
+    return;
+  }
+
   // ---- 查看/复制视频标题 ----
   if (info.menuItemId === getCopyTitleMenuId()) {
     await handleCopyVideoTitle(tab);
@@ -287,6 +302,22 @@ async function fetchTitleFromServer(url, videoId) {
   }
 }
 
+// 检查扩展是否对该 URL 拥有主机权限。
+// 右键菜单是 contexts:["all"]，会出现在任何站点上；对不在 host_permissions
+// 里的站点执行 executeScript / fetch 必然失败（Cannot access contents / CORS），
+// 所以调用前先预检，无权限时静默走 tab.title 兜底。
+async function hasHostAccess(url) {
+  try {
+    if (!url) return false;
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    if (!chrome.permissions?.contains) return true;
+    return await chrome.permissions.contains({ origins: [`${parsed.origin}/*`] });
+  } catch {
+    return false;
+  }
+}
+
 // 从页面上下文读取（world: MAIN）— 直接读取 window.ytInitialData
 async function extractTitleFromPageContext(tabId, videoId) {
   try {
@@ -346,11 +377,68 @@ async function extractTitleFromPageContext(tabId, videoId) {
   }
 }
 
+// 处理"TikTok搜索"右键菜单点击
+async function handleTikTokSearch(tab) {
+  if (!tab?.id) return;
+
+  // 获取视频标题
+  let title = "";
+  try {
+    const response = await chrome.tabs.sendMessage(tab.id, { type: "getVideoTitle" });
+    title = response?.title || "";
+  } catch {}
+
+  if (!title) {
+    if (await hasHostAccess(tab.url)) {
+      title = await extractTitleFromPageContext(tab.id, "");
+    }
+  }
+
+  if (!title) {
+    title = tab.title || "";
+  }
+
+  // 提取第一个 # 后的内容，将 # 替换为空格
+  const hashIndex = title.indexOf("#");
+  if (hashIndex === -1) return; // 没有 # 则不触发任何动作
+
+  const query = title.substring(hashIndex + 1).replace(/#/g, " ").trim();
+  if (!query) return;
+
+  const searchUrl = `https://www.tiktok.com/search/video?q=${encodeURIComponent(query)}`;
+  chrome.tabs.create({ url: searchUrl });
+}
+
+// 处理"复制当前视频地址"右键菜单点击
+async function handleCopyVideoUrl(info, tab) {
+  const videoUrl = info.linkUrl || info.srcUrl || info.pageUrl;
+  if (!videoUrl) return;
+
+  try {
+    await navigator.clipboard.writeText(videoUrl);
+  } catch {
+    // 回退：通过 content script 复制
+    if (tab?.id) {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (text) => { navigator.clipboard.writeText(text); },
+        args: [videoUrl],
+      });
+    }
+  }
+}
+
 // 处理"查看视频标题"右键菜单点击
 async function handleCopyVideoTitle(tab) {
   if (!tab?.id) return;
   let title = "";
   let videoId = "";
+
+  // 该站点是否在 host_permissions 内 —— 决定方案2/3/注入是否可用
+  const allowed = await hasHostAccess(tab.url);
+  if (!allowed) {
+    console.debug("[视频好帮手] 无该站点主机权限，跳过页面注入与 fetch:", tab.url);
+  }
 
   // 方案1: 向内容脚本获取 videoId（右键时通过 composedPath 捕获）
   try {
@@ -364,13 +452,13 @@ async function handleCopyVideoTitle(tab) {
 
   // ★ 方案2（核心）: chrome.scripting.executeScript + world:MAIN
   // 直接读取 window.ytInitialData / TikTok 数据，完全绕过 CSP
-  if (!title) {
+  if (!title && allowed) {
     title = await extractTitleFromPageContext(tab.id, videoId);
     console.log("[视频好帮手] 方案2 world:MAIN 返回:", (title || "(空)").substring(0, 80));
   }
 
   // 方案3: background fetch 页面 HTML
-  if (!title && tab.url) {
+  if (!title && allowed && tab.url) {
     title = await fetchTitleFromServer(tab.url, videoId);
     console.log("[视频好帮手] 方案3 fetch 返回:", (title || "(空)").substring(0, 80));
   }
@@ -378,7 +466,7 @@ async function handleCopyVideoTitle(tab) {
   // 方案4: 最终兜底用 tab.title
   if (!title) {
     title = tab.title || "未找到视频标题";
-    console.log("[视频好帮手] 方案4 兆底 tab.title:", title.substring(0, 80));
+    console.log("[视频好帮手] 方案4 兜底 tab.title:", title.substring(0, 80));
   }
 
   showTitleDialog(tab, title);
@@ -475,8 +563,8 @@ function showTitleDialog(tab, title) {
     },
     args: [title],
   }).catch((e) => {
-    console.error("[视频好帮手] showTitleDialog inject failed:", e);
-    // 最终兜底：使用通知
+    // 无主机权限 / 特殊页面（chrome://、扩展页）无法注入属预期情况，转用通知展示
+    console.debug("[视频好帮手] showTitleDialog 注入失败，改用通知:", e?.message || e);
     const notifId = `title-${Date.now()}`;
     chrome.storage?.local?.set({ ["__og_title_clipboard"]: title }).catch(() => {});
     chrome.notifications?.create(notifId, {
@@ -1008,8 +1096,17 @@ async function capturePlatformCookies(platform, force = false) {
     console.info("[视频好帮手] all cookies exported:", cookies.length);
     return { ok: true, count: cookies.length };
   }
-  console.warn("[视频好帮手] cookie export failed:", response.reason ?? response.message);
-  return { ok: false, reason: response.reason ?? "bridge_failed" };
+  const reason = response.reason ?? "bridge_failed";
+  // 客户端未启动 / 未配对属于常态（定时任务每 2 分钟触发一次），
+  // 这类原因降级为 debug，避免持续刷红控制台。
+  const clientNotReady = reason === "fetch-failed" || reason === "missing-endpoint"
+    || reason === "no-endpoint" || reason === "missing-token";
+  if (clientNotReady) {
+    console.debug("[视频好帮手] 客户端未就绪，跳过 cookie 上传:", reason);
+  } else {
+    console.warn("[视频好帮手] cookie export failed:", response.message ?? reason);
+  }
+  return { ok: false, reason };
 }
 
 async function scanOpenTabsForCookies() {
@@ -1028,11 +1125,14 @@ async function scanOpenTabsForCookies() {
       const platform = platformForDomain(host);
       if (!platform || seen.has(platform)) continue;
       seen.add(platform);
-      void capturePlatformCookies(platform, true);
     }
     if (seen.size === 0) {
       console.info("[视频好帮手] no tracked tabs open at extension load");
+      return;
     }
+    // 仅作诊断记录：实际上传由 scanAllPlatformsForCookies 统一触发一次，
+    // 避免同一份全量 cookie 被重复上传。
+    console.debug("[视频好帮手] tracked platforms open:", [...seen].join(", "));
   } catch (e) {
     console.warn("[视频好帮手] scan tabs failed", e);
   }
@@ -1043,28 +1143,12 @@ async function scanOpenTabsForCookies() {
 // for that login, and they may not have a tab open right now).
 async function scanAllPlatformsForCookies() {
   if (!chrome.cookies?.getAll) return;
-  const allPlatforms = [
-    "youtube",
-    "instagram",
-    "tiktok",
-    "twitter",
-    "reddit",
-    "twitch",
-    "vimeo",
-    "bilibili",
-    "soundcloud",
-    "pinterest",
-    "hotmart",
-    "udemy",
-    "bluesky",
-    "telegram",
-  ];
-  for (const platform of allPlatforms) {
-    try {
-      void capturePlatformCookies(platform, true);
-    } catch (e) {
-      console.warn(`[视频好帮手] proactive capture ${platform} failed`, e);
-    }
+  // 同上：一次全量导出即覆盖所有平台。历史实现按 14 个平台各调一次，
+  // 会把同一份 cookie 重复上传 14 遍，客户端未运行时还会刷 14 条报错。
+  try {
+    await capturePlatformCookies("__all__", true);
+  } catch (e) {
+    console.warn("[视频好帮手] proactive capture failed", e);
   }
 }
 
@@ -1111,8 +1195,16 @@ if (chrome.alarms?.onAlarm) {
       console.info("[视频好帮手] 定时 Cookie 刷新触发");
       void scanAllPlatformsForCookies();
     }
+    // Lens 轮询兜底：service worker 被回收后靠这个闹钟重新拉起秒级轮询
+    if (alarm?.name === LENS_POLL_ALARM) {
+      resumeLensPolling();
+    }
   });
 }
+
+// ---- Google Lens 任务轮询（新增） ----
+startLensPolling();
+
 
 if (chrome.cookies?.onChanged) {
   chrome.cookies.onChanged.addListener((change) => {

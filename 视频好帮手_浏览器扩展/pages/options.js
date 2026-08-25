@@ -21,7 +21,7 @@ const discoveryMessage = document.getElementById("discovery-message");
 const endpointHint = document.getElementById("endpoint-hint");
 const advancedDetails = document.getElementById("advanced");
 
-const FALLBACK_ENDPOINT = "http://127.0.0.1:47720";
+const FALLBACK_ENDPOINT = "http://127.0.0.1:5999";
 
 function resolvedEndpoint() {
   return trimEndpoint(endpointInput.value) || FALLBACK_ENDPOINT;

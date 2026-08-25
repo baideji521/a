@@ -6,6 +6,22 @@
 !README.md
 !.gitignore
 
+# 一键上传脚本
+!upload.ps1
+!upload.bat
+
+
+# 运行时日志不入库（logs/ 下全部忽略）
+# 需要诊断时手动上传 logs/tiktok_debug.log，该文件已脱敏
+
 # 保留扩展目录
-!视频好帮手_浏览器扩展
+!视频好帮手_浏览器扩展/
 !视频好帮手_浏览器扩展/**
+
+# 明确禁止提交任何 Cookie / Session / 本地身份文件（双重保险）
+cookies/
+*.cookie
+*.cookies
+cookies.txt
+browser_ua.txt
+_all_cookies.txt

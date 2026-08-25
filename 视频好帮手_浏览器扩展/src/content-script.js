@@ -31,6 +31,44 @@
   const IS_SOUNDCLOUD = host.endsWith("soundcloud.com");
   const PLATFORM = IS_TIKTOK ? "tiktok" : IS_YOUTUBE ? "youtube" : IS_INSTAGRAM ? "instagram" : IS_TWITTER ? "twitter" : IS_BILIBILI ? "bilibili" : IS_VIMEO ? "vimeo" : IS_TWITCH ? "twitch" : IS_REDDIT ? "reddit" : IS_PINTEREST ? "pinterest" : IS_SOUNDCLOUD ? "soundcloud" : "generic";
 
+  // ============ 扩展上下文守卫 ============
+  // 扩展被重载/更新/停用后，遗留在页面里的本脚本仍会继续运行，此时任何
+  // chrome.* 调用都会抛 "Extension context invalidated"。统一在这里拦掉，
+  // 并停止后续扫描，避免把未捕获异常刷进页面控制台。
+  let contextAlive = true;
+
+  function isContextAlive() {
+    if (!contextAlive) return false;
+    try {
+      if (!chrome.runtime?.id) {
+        contextAlive = false;
+      }
+    } catch {
+      contextAlive = false;
+    }
+    return contextAlive;
+  }
+
+  // 安全版 sendMessage：上下文失效时直接回调 undefined，不抛异常
+  function safeSendMessage(msg, cb) {
+    if (!isContextAlive()) {
+      if (cb) cb(undefined);
+      return false;
+    }
+    try {
+      chrome.runtime.sendMessage(msg, (resp) => {
+        // 读取 lastError 以消除 "Unchecked runtime.lastError" 噪声
+        void chrome.runtime.lastError;
+        if (cb) cb(resp);
+      });
+      return true;
+    } catch {
+      contextAlive = false;
+      if (cb) cb(undefined);
+      return false;
+    }
+  }
+
   // ============ 样式 ============
   function injectCSS() {
     if (document.getElementById("og-s")) return;
@@ -66,7 +104,7 @@
   // ============ 发送 ============
   function send(url) {
     return new Promise(r => {
-      chrome.runtime.sendMessage({ type: "sendTo视频好帮手", url, platform: PLATFORM, referer: location.href, title: document.title }, resp => r(resp));
+      safeSendMessage({ type: "sendTo视频好帮手", url, platform: PLATFORM, referer: location.href, title: document.title }, resp => r(resp));
     });
   }
 
@@ -181,7 +219,7 @@
     });
 
     // 通过 background 在 MAIN world 注入 fetch/XHR 拦截（background 有 chrome.tabs + chrome.scripting 权限）
-    chrome.runtime.sendMessage({ type: "injectNetworkInterceptor" }, () => {});
+    safeSendMessage({ type: "injectNetworkInterceptor" }, () => {});
   }
 
   function scanIntercepted() {
@@ -224,7 +262,7 @@
   function scanInternalState() {
     if (!IS_YOUTUBE) return 0;
     // 通过 background 在 MAIN world 读取 ytInitialData（background 有 chrome.tabs + chrome.scripting 权限）
-    chrome.runtime.sendMessage({ type: "scanYtInternalState" }, (resp) => {
+    safeSendMessage({ type: "scanYtInternalState" }, (resp) => {
       try {
         const ids = resp?.ids || [];
         let n = 0;
@@ -563,7 +601,7 @@
       };
       window.addEventListener(eventName, handler);
 
-      chrome.runtime.sendMessage({ type: "readPageTitle", videoId: videoId || "", eventName }, (resp) => {
+      safeSendMessage({ type: "readPageTitle", videoId: videoId || "", eventName }, (resp) => {
         // background 注入的代码会 dispatch custom event，handler 会捕获
       });
 
@@ -636,6 +674,17 @@
   }
 
   // ============ 初始化 ============
+  let scanObserver = null;
+  let scanInterval = null;
+
+  // 上下文失效后彻底停掉扫描，避免旧脚本在页面里空转
+  function teardown() {
+    try { scanObserver?.disconnect(); } catch {}
+    if (scanInterval) clearInterval(scanInterval);
+    scanObserver = null;
+    scanInterval = null;
+  }
+
   function init() {
     injectCSS();
     interceptNetwork();
@@ -645,8 +694,15 @@
     simulateUserActivity(); // 模拟用户活跃行为
     scan();
 
-    new MutationObserver(scan).observe(document.body || document.documentElement, { childList: true, subtree: true });
-    setInterval(scan, 3000);
+    scanObserver = new MutationObserver(() => {
+      if (!isContextAlive()) { teardown(); return; }
+      scan();
+    });
+    scanObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    scanInterval = setInterval(() => {
+      if (!isContextAlive()) { teardown(); return; }
+      scan();
+    }, 3000);
 
     console.log(`[视频好帮手] 内容脚本已加载 (${PLATFORM})`);
   }

@@ -13,6 +13,16 @@ export function createActionFeedbackController({
 }) {
   const badgeTimeouts = new Map();
 
+  // 标签页可能在徽章设置/清除之前就被关闭（chrome.action 会抛
+  // "No tab with id: xxx"）。这属于预期情况，静默吞掉即可。
+  async function safeCall(fn, args) {
+    try {
+      await fn(args);
+    } catch {
+      // tab 已关闭，忽略
+    }
+  }
+
   function clearBadgeTimer(tabId) {
     const timeoutId = badgeTimeouts.get(tabId);
     if (timeoutId === undefined) {
@@ -29,7 +39,7 @@ export function createActionFeedbackController({
     }
 
     clearBadgeTimer(tabId);
-    await setBadgeText({
+    await safeCall(setBadgeText, {
       tabId,
       text: "",
     });
@@ -43,11 +53,11 @@ export function createActionFeedbackController({
     clearBadgeTimer(tabId);
 
     await Promise.all([
-      setBadgeBackgroundColor({
+      safeCall(setBadgeBackgroundColor, {
         tabId,
         color: successColor,
       }),
-      setBadgeText({
+      safeCall(setBadgeText, {
         tabId,
         text: successText,
       }),
@@ -55,7 +65,7 @@ export function createActionFeedbackController({
 
     const timeoutId = setTimeoutFn(() => {
       badgeTimeouts.delete(tabId);
-      void setBadgeText({
+      void safeCall(setBadgeText, {
         tabId,
         text: "",
       });
