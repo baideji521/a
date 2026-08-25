@@ -4659,7 +4659,7 @@ class LinkListWidget(QListWidget):
         failed = []
         for item in self.selectedItems():
             fg = item.foreground()
-            if fg and fg.color() and fg.color().name().lower() == "#b5473c":
+            if fg and fg.color() and fg.color().name().lower() == "#f38ba8":
                 failed.append(item.text().strip())
         return failed
 
@@ -5643,39 +5643,30 @@ class MainWindow(QMainWindow):
         )
 
     def apply_style(self):
-        """
-        米灰主题（暖调 + 靛青）。
-
-        设计规则：
-        - 不使用纯白，避免屏幕过亮刺眼；也不使用零彩度灰，避免发闷。
-        - 明度分三层，层次靠亮度差而不是靠边框硬撑：
-          窗口 #ebe8e3 < 卡片 #f6f4f0 < 输入/列表/日志 #fbfaf8
-        - 强调色统一为靛青 #3f7285，正文 #2b2825。
-        """
 
         self.setStyleSheet(
             """
             QMainWindow {
-                background: #ebe8e3;
+                background: #1e1e2e;
             }
 
             QWidget {
-                color: #2b2825;
+                color: #cdd6f4;
                 font-family: "Microsoft YaHei";
                 font-size: 13px;
             }
 
             QLabel#title {
-                color: #7a5c37;
+                color: #cba6f7;
                 font-size: 18px;
                 font-weight: bold;
                 padding-left: 2px;
             }
 
             QLabel#status {
-                color: #55504a;
-                background: rgba(85, 80, 74, 0.08);
-                border: 1px solid #d8d3cb;
+                color: #a6adc8;
+                background: rgba(166, 173, 200, 0.10);
+                border: 1px solid #585b70;
                 border-radius: 11px;
                 padding: 3px 14px;
                 font-size: 12px;
@@ -5683,52 +5674,52 @@ class MainWindow(QMainWindow):
             }
 
             QLabel#status[state="idle"] {
-                color: #55504a;
-                background: rgba(85, 80, 74, 0.08);
-                border-color: #d8d3cb;
+                color: #a6adc8;
+                background: rgba(166, 173, 200, 0.10);
+                border-color: #585b70;
             }
 
             QLabel#status[state="busy"] {
-                color: #2c5a6b;
-                background: rgba(63, 114, 133, 0.13);
-                border-color: #9dc2ce;
+                color: #89b4fa;
+                background: rgba(137, 180, 250, 0.16);
+                border-color: #89b4fa;
             }
 
             QLabel#status[state="ok"] {
-                color: #33693d;
-                background: rgba(63, 125, 74, 0.13);
-                border-color: #a8ccae;
+                color: #a6e3a1;
+                background: rgba(166, 227, 161, 0.16);
+                border-color: #a6e3a1;
             }
 
             QLabel#status[state="warn"] {
-                color: #7a5a0f;
-                background: rgba(143, 106, 18, 0.13);
-                border-color: #ddc78a;
+                color: #f9e2af;
+                background: rgba(249, 226, 175, 0.16);
+                border-color: #f9e2af;
             }
 
             QLabel#status[state="stop"] {
-                color: #a03d33;
-                background: rgba(181, 71, 60, 0.13);
-                border-color: #e0aaa3;
+                color: #f38ba8;
+                background: rgba(243, 139, 168, 0.16);
+                border-color: #f38ba8;
             }
 
             QLabel#smallLabel {
-                color: #55504a;
+                color: #a6adc8;
             }
 
             QLabel#sectionTitle {
-                color: #2b2825;
+                color: #cdd6f4;
                 font-size: 13px;
                 font-weight: bold;
             }
 
             QLabel#countLabel {
-                color: #8d867d;
+                color: #7f849c;
                 margin-left: 8px;
             }
 
             QLabel#hint {
-                color: #8d867d;
+                color: #6c7086;
                 font-size: 11px;
             }
 
@@ -5736,8 +5727,8 @@ class MainWindow(QMainWindow):
 
             QFrame#settingFrame,
             QFrame#linkFrame {
-                background: #f6f4f0;
-                border: 1px solid #d8d3cb;
+                background: #313244;
+                border: 1px solid #45475a;
                 border-radius: 10px;
             }
 
@@ -5745,39 +5736,39 @@ class MainWindow(QMainWindow):
 
             QLineEdit,
             QComboBox {
-                background: #fbfaf8;
-                border: 1px solid #d8d3cb;
+                background: #1e1e2e;
+                border: 1px solid #45475a;
                 border-radius: 6px;
-                color: #2b2825;
+                color: #cdd6f4;
                 padding: 5px 10px;
                 min-height: 27px;
-                selection-background-color: #3f7285;
-                selection-color: #ffffff;
+                selection-background-color: #89b4fa;
+                selection-color: #1e1e2e;
             }
 
             QLineEdit:hover,
             QComboBox:hover {
-                border: 1px solid #b9b2a7;
-                background: #ffffff;
+                border: 1px solid #6c7086;
+                background: #232336;
             }
 
             QLineEdit:focus,
             QComboBox:focus,
             QComboBox:on {
-                border: 1px solid #3f7285;
-                background: #fbfaf8;
+                border: 1px solid #89b4fa;
+                background: #1e1e2e;
             }
 
             QLineEdit:disabled,
             QComboBox:disabled {
-                background: #ece8e1;
-                color: #a8a29a;
-                border-color: #e0dbd2;
+                background: #262636;
+                color: #6c7086;
+                border-color: #3a3a4c;
             }
 
             QLineEdit[readOnly="true"] {
-                background: #f1eee9;
-                color: #55504a;
+                background: #262636;
+                color: #a6adc8;
             }
 
             QComboBox::drop-down {
@@ -5787,11 +5778,11 @@ class MainWindow(QMainWindow):
             }
 
             QComboBox QAbstractItemView {
-                background: #fbfaf8;
-                color: #2b2825;
-                selection-background-color: #dfe6e8;
-                selection-color: #2c5a6b;
-                border: 1px solid #d8d3cb;
+                background: #313244;
+                color: #cdd6f4;
+                selection-background-color: #45475a;
+                selection-color: #cba6f7;
+                border: 1px solid #585b70;
                 border-radius: 6px;
                 padding: 4px;
                 outline: none;
@@ -5800,40 +5791,40 @@ class MainWindow(QMainWindow):
             /* ---------- 按钮 ---------- */
 
             QPushButton {
-                background: #f6f4f0;
-                border: 1px solid #d8d3cb;
+                background: #45475a;
+                border: 1px solid #585b70;
                 border-radius: 6px;
-                color: #2b2825;
+                color: #cdd6f4;
                 padding: 6px 14px;
                 min-height: 28px;
             }
 
             QPushButton:hover {
-                background: #e4e0d9;
-                border: 1px solid #b9b2a7;
+                background: #585b70;
+                border: 1px solid #7f849c;
             }
 
             QPushButton:pressed {
-                background: #dcd7ce;
-                border-color: #b9b2a7;
+                background: #313244;
+                border-color: #585b70;
             }
 
             QPushButton:focus {
-                border: 1px solid #3f7285;
+                border: 1px solid #89b4fa;
             }
 
             QPushButton:disabled {
-                background: #ece8e1;
-                color: #a8a29a;
-                border-color: #e0dbd2;
+                background: #2c2c3d;
+                color: #585b70;
+                border-color: #3a3a4c;
             }
 
             QPushButton#primaryButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #5b8e9f, stop:1 #3f7285);
-                border: 1px solid #2c5a6b;
+                    stop:0 #9dc1fb, stop:1 #89b4fa);
+                border: 1px solid #b4befe;
                 border-radius: 6px;
-                color: #ffffff;
+                color: #1e1e2e;
                 font-weight: bold;
                 padding-left: 22px;
                 padding-right: 22px;
@@ -5841,56 +5832,56 @@ class MainWindow(QMainWindow):
 
             QPushButton#primaryButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #6c9fb0, stop:1 #4a8093);
+                    stop:0 #c2cbff, stop:1 #b4befe);
             }
 
             QPushButton#primaryButton:pressed {
-                background: #2c5a6b;
-                border-color: #244a58;
+                background: #74c7ec;
+                border-color: #89dceb;
             }
 
             QPushButton#primaryButton:disabled {
-                background: #ece8e1;
-                color: #a8a29a;
-                border-color: #e0dbd2;
+                background: #2c2c3d;
+                color: #585b70;
+                border-color: #3a3a4c;
             }
 
             /* ---------- 复选框 ---------- */
 
             QCheckBox {
-                color: #2b2825;
+                color: #cdd6f4;
                 spacing: 7px;
             }
 
             QCheckBox::indicator {
                 width: 15px;
                 height: 15px;
-                border: 1px solid #b9b2a7;
+                border: 1px solid #585b70;
                 border-radius: 4px;
-                background: #fbfaf8;
+                background: #1e1e2e;
             }
 
             QCheckBox::indicator:hover {
-                border-color: #3f7285;
+                border-color: #89b4fa;
             }
 
             QCheckBox::indicator:checked {
-                background: #3f7285;
-                border-color: #2c5a6b;
+                background: #89b4fa;
+                border-color: #b4befe;
             }
 
             QCheckBox::indicator:disabled {
-                background: #ece8e1;
-                border-color: #e0dbd2;
+                background: #2c2c3d;
+                border-color: #3a3a4c;
             }
 
             /* ---------- 链接列表 ---------- */
 
             QListWidget#linkList {
-                background: #fbfaf8;
-                border: 1px solid #d8d3cb;
+                background: #1e1e2e;
+                border: 1px solid #45475a;
                 border-radius: 8px;
-                color: #2b2825;
+                color: #cdd6f4;
                 padding: 4px;
                 outline: none;
             }
@@ -5902,37 +5893,37 @@ class MainWindow(QMainWindow):
             }
 
             QListWidget#linkList::item:hover {
-                background: #ece8e1;
+                background: #2a2a3c;
             }
 
             QListWidget#linkList::item:selected {
-                background: #dfe6e8;
-                color: #2c5a6b;
+                background: #45475a;
+                color: #cba6f7;
             }
 
             /* ---------- 日志 ---------- */
 
             QTextEdit#logEdit {
-                background: #fbfaf8;
-                border: 1px solid #d8d3cb;
+                background: #181825;
+                border: 1px solid #45475a;
                 border-radius: 8px;
-                color: #3c3833;
+                color: #a6adc8;
                 padding: 8px;
                 font-family: "Cascadia Mono", "JetBrains Mono", Consolas,
                              "Microsoft YaHei";
                 font-size: 12px;
-                selection-background-color: #dfe6e8;
-                selection-color: #2c5a6b;
+                selection-background-color: #45475a;
+                selection-color: #cdd6f4;
             }
 
             /* ---------- 进度条 ---------- */
 
             QProgressBar {
-                background: #ece8e1;
-                border: 1px solid #d8d3cb;
+                background: #181825;
+                border: 1px solid #45475a;
                 border-radius: 10px;
                 text-align: center;
-                color: #17323a;
+                color: #cdd6f4;
                 font-size: 11px;
                 font-weight: bold;
                 min-height: 20px;
@@ -5941,16 +5932,16 @@ class MainWindow(QMainWindow):
 
             QProgressBar::chunk {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #9dc2ce, stop:1 #74a4b3);
+                    stop:0 #7a99f2, stop:1 #4c6ed6);
                 border-radius: 9px;
             }
 
             /* ---------- 菜单 ---------- */
 
             QMenu {
-                background: #fbfaf8;
-                color: #2b2825;
-                border: 1px solid #d8d3cb;
+                background: #313244;
+                color: #cdd6f4;
+                border: 1px solid #585b70;
                 border-radius: 8px;
                 padding: 5px;
             }
@@ -5962,26 +5953,26 @@ class MainWindow(QMainWindow):
             }
 
             QMenu::item:selected {
-                background: #dfe6e8;
-                color: #2c5a6b;
+                background: #45475a;
+                color: #89b4fa;
             }
 
             QMenu::item:disabled {
-                color: #a8a29a;
+                color: #585b70;
             }
 
             QMenu::separator {
                 height: 1px;
-                background: #e0dbd2;
+                background: #45475a;
                 margin: 4px 8px;
             }
 
             /* ---------- 提示气泡 ---------- */
 
             QToolTip {
-                background: #2f2b26;
-                color: #f6f4f0;
-                border: 1px solid #2f2b26;
+                background: #181825;
+                color: #cdd6f4;
+                border: 1px solid #585b70;
                 border-radius: 6px;
                 padding: 5px 8px;
                 font-size: 12px;
@@ -5991,11 +5982,11 @@ class MainWindow(QMainWindow):
 
             QDialog,
             QMessageBox {
-                background: #ebe8e3;
+                background: #1e1e2e;
             }
 
             QMessageBox QLabel {
-                color: #2b2825;
+                color: #cdd6f4;
             }
 
             QMessageBox QPushButton {
@@ -6012,17 +6003,17 @@ class MainWindow(QMainWindow):
             }
 
             QScrollBar::handle:vertical {
-                background: #d1cbc1;
+                background: #45475a;
                 border-radius: 5px;
                 min-height: 24px;
             }
 
             QScrollBar::handle:vertical:hover {
-                background: #b9b2a7;
+                background: #6c7086;
             }
 
             QScrollBar::handle:vertical:pressed {
-                background: #3f7285;
+                background: #89b4fa;
             }
 
             QScrollBar:horizontal {
@@ -6033,17 +6024,17 @@ class MainWindow(QMainWindow):
             }
 
             QScrollBar::handle:horizontal {
-                background: #d1cbc1;
+                background: #45475a;
                 border-radius: 5px;
                 min-width: 24px;
             }
 
             QScrollBar::handle:horizontal:hover {
-                background: #b9b2a7;
+                background: #6c7086;
             }
 
             QScrollBar::handle:horizontal:pressed {
-                background: #3f7285;
+                background: #89b4fa;
             }
 
             QScrollBar::add-line:vertical,
@@ -7314,7 +7305,7 @@ class MainWindow(QMainWindow):
             for i in range(self.link_list.count()):
                 item = self.link_list.item(i)
                 if item and item.text().strip() == url:
-                    item.setForeground(QColor("#b5473c"))
+                    item.setForeground(QColor("#f38ba8"))
                     break
         except Exception:
             pass
@@ -7327,7 +7318,7 @@ class MainWindow(QMainWindow):
                 item = self.link_list.item(i)
                 if item:
                     fg = item.foreground()
-                    if fg and fg.color() and fg.color().name().lower() == "#b5473c":
+                    if fg and fg.color() and fg.color().name().lower() == "#f38ba8":
                         failed_urls.append(item.text().strip())
                         self.link_list.takeItem(i)
             if failed_urls:
@@ -7520,7 +7511,7 @@ class MainWindow(QMainWindow):
                 item = self.link_list.item(i)
                 if item:
                     fg = item.foreground()
-                    is_red = fg and fg.color() and fg.color().name().lower() == "#b5473c"
+                    is_red = fg and fg.color() and fg.color().name().lower() == "#f38ba8"
                     if not is_red:
                         url = item.text().strip()
                         if url:
@@ -7690,87 +7681,52 @@ def apply_application_style(
         "Fusion"
     )
 
-    # ========================================================
-    # 米灰主题（暖调底色 + 靛青强调色）
-    #
-    # QSS 只作用于被显式选中的控件，
-    # QMessageBox / QFileDialog 等系统弹窗走的是 QPalette，
-    # 两层必须同时改，否则浅色界面会弹出深色对话框。
-    # ========================================================
-
     palette = QPalette()
 
     palette.setColor(
         QPalette.Window,
-        QColor("#ebe8e3")
+        QColor("#1e1e2e")
     )
 
     palette.setColor(
         QPalette.WindowText,
-        QColor("#2b2825")
+        QColor("#cdd6f4")
     )
 
     palette.setColor(
         QPalette.Base,
-        QColor("#fbfaf8")
+        QColor("#181825")
     )
 
     palette.setColor(
         QPalette.AlternateBase,
-        QColor("#f6f4f0")
+        QColor("#313244")
     )
 
     palette.setColor(
         QPalette.Text,
-        QColor("#2b2825")
+        QColor("#cdd6f4")
     )
 
     palette.setColor(
         QPalette.Button,
-        QColor("#f6f4f0")
+        QColor("#45475a")
     )
 
     palette.setColor(
         QPalette.ButtonText,
-        QColor("#2b2825")
+        QColor("#cdd6f4")
     )
 
     palette.setColor(
         QPalette.Highlight,
-        QColor("#3f7285")
+        QColor("#89b4fa")
     )
 
     palette.setColor(
         QPalette.HighlightedText,
-        QColor("#ffffff")
+        QColor("#1e1e2e")
     )
-
-    palette.setColor(
-        QPalette.ToolTipBase,
-        QColor("#2f2b26")
-    )
-
-    palette.setColor(
-        QPalette.ToolTipText,
-        QColor("#f6f4f0")
-    )
-
-    palette.setColor(
-        QPalette.PlaceholderText,
-        QColor("#8d867d")
-    )
-
-    for role in (
-        QPalette.WindowText,
-        QPalette.Text,
-        QPalette.ButtonText
-    ):
-
-        palette.setColor(
-            QPalette.Disabled,
-            role,
-            QColor("#a8a29a")
-        )
 
     app.setPalette(
         palette

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "视频好帮手",
   "description": "你的好帮手",
-  "version": "1.7.1",
+  "version": "1.6.9",
   "default_locale": "en",
   "permissions": [
     "tabs",
@@ -17,10 +17,6 @@
   "host_permissions": [
     "http://127.0.0.1/*",
     "http://localhost/*",
-    "*://lens.google.com/*",
-    "*://www.google.com/*",
-    "*://consent.google.com/*",
-    "*://*.gstatic.com/*",
     "*://*.hotmart.com/*",
     "*://*.youtube.com/*",
     "*://*.youtube-nocookie.com/*",

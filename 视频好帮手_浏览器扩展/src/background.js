@@ -14,9 +14,6 @@ import {
   AUTOPAIR_ALARM_NAME,
   STORAGE_KEY_TOKEN,
 } from "./bridge-client.js";
-// Google Lens 图片反向搜索任务处理器（新增，与下载链路互不影响）
-import { startLensPolling, resumeLensPolling, LENS_POLL_ALARM } from "./lens-task.js";
-
 
 const AUTOPAIR_ALARM = AUTOPAIR_ALARM_NAME;
 
@@ -1195,16 +1192,8 @@ if (chrome.alarms?.onAlarm) {
       console.info("[视频好帮手] 定时 Cookie 刷新触发");
       void scanAllPlatformsForCookies();
     }
-    // Lens 轮询兜底：service worker 被回收后靠这个闹钟重新拉起秒级轮询
-    if (alarm?.name === LENS_POLL_ALARM) {
-      resumeLensPolling();
-    }
   });
 }
-
-// ---- Google Lens 任务轮询（新增） ----
-startLensPolling();
-
 
 if (chrome.cookies?.onChanged) {
   chrome.cookies.onChanged.addListener((change) => {
