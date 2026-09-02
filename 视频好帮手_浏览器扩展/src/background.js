@@ -1189,6 +1189,73 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       func: () => {
         if (window.__ogNetIntercepted) return;
         window.__ogNetIntercepted = true;
+        // TikTok 统计数据（点赞 / 评论）：__og-net 只带前 50000 字符，
+        // 而 stats / statistics 往往在截断之外，所以在 MAIN world 就着完整响应
+        // 抽成极小的 {id, author, likeCount, commentCount} 列表单独派发。
+        // 只按 videoId 归属，不跨条目拼字段；不改动下面 __og-net 的任何行为。
+        const ogTikTokMeta = (text) => {
+          try {
+            if (!/(^|\.)tiktok\.com$/.test(location.hostname)) return;
+            if (!text || text.length > 4000000) return;
+            if (text.indexOf('"diggCount"') < 0 && text.indexOf('"digg_count"') < 0) return;
+            let data;
+            try { data = JSON.parse(text); } catch (e) { return; }
+            const out = [];
+            const ids = new Set();
+            const orphans = [];
+            const isVideoId = (v) => (typeof v === 'string' && /^\d{15,}$/.test(v)) ||
+              (typeof v === 'number' && String(v).length >= 15);
+            const num = (v) => {
+              if (v === undefined || v === null || v === '') return undefined;
+              const n = typeof v === 'number' ? v : Number(v);
+              return Number.isFinite(n) && n >= 0 ? n : undefined;
+            };
+            const walk = (node, ownerId, parentKey, depth) => {
+              if (!node || typeof node !== 'object' || depth > 16 || out.length > 120) return;
+              if (Array.isArray(node)) {
+                for (let i = 0; i < node.length; i++) walk(node[i], ownerId, parentKey, depth + 1);
+                return;
+              }
+              // 只有"看起来是视频条目"的对象才允许改写归属 id，避免被 author.id / music.id 带偏
+              const cand = node.id !== undefined ? node.id
+                : node.aweme_id !== undefined ? node.aweme_id
+                : node.awemeId !== undefined ? node.awemeId
+                : node.itemId;
+              const looksItem = ('desc' in node) || ('video' in node) || ('stats' in node) ||
+                ('statistics' in node) || ('author' in node) || ('createTime' in node) || ('create_time' in node);
+              let id = ownerId;
+              if (looksItem && isVideoId(cand)) { id = String(cand); ids.add(id); }
+              // 作者统计（authorStats / 含 followerCount 的对象）里的 diggCount 是作者总获赞，不是本视频
+              const authorish = /author/i.test(parentKey || '') ||
+                ('followerCount' in node) || ('follower_count' in node) ||
+                ('heartCount' in node) || ('heart' in node) || ('followingCount' in node);
+              const like = authorish ? undefined : num(node.diggCount !== undefined ? node.diggCount : node.digg_count);
+              const comment = authorish ? undefined : num(node.commentCount !== undefined ? node.commentCount : node.comment_count);
+              if (id) {
+                if (like !== undefined || comment !== undefined) out.push({ id: id, likeCount: like, commentCount: comment });
+                const uid = node.uniqueId || node.unique_id || node.uniqueID;
+                if (typeof uid === 'string' && uid) out.push({ id: id, author: uid, nickname: typeof node.nickname === 'string' ? node.nickname : '' });
+              } else if (like !== undefined || comment !== undefined) {
+                // 计数对象没有 id 归属：先记下，等确认整份响应只有一个视频再认领
+                orphans.push({ likeCount: like, commentCount: comment });
+              }
+              for (const k in node) {
+                const v = node[k];
+                if (v && typeof v === 'object') walk(v, id, k, depth + 1);
+              }
+            };
+            walk(data, '', '', 0);
+            if (ids.size === 1 && orphans.length) {
+              const only = ids.values().next().value;
+              for (let i = 0; i < orphans.length; i++) {
+                out.push({ id: only, likeCount: orphans[i].likeCount, commentCount: orphans[i].commentCount });
+              }
+            }
+            if (out.length) {
+              window.dispatchEvent(new CustomEvent('__og-tt-meta', { detail: JSON.stringify(out).substring(0, 200000) }));
+            }
+          } catch (e) {}
+        };
         const origFetch = window.fetch;
         window.fetch = function() {
           const url = arguments[0]?.url || arguments[0] || '';
@@ -1199,6 +1266,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 if (text.length > 500 && (text.includes('"videoId"') || text.includes('"playAddr"'))) {
                   window.dispatchEvent(new CustomEvent('__og-net', { detail: text.substring(0, 50000) }));
                 }
+                ogTikTokMeta(text);
               }).catch(()=>{});
             } catch(e){}
             return resp;
@@ -1214,6 +1282,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               if (t && t.length > 500 && (t.includes('"videoId"') || t.includes('"playAddr"'))) {
                 window.dispatchEvent(new CustomEvent('__og-net', { detail: t.substring(0, 50000) }));
               }
+              ogTikTokMeta(t);
             } catch(e){}
           });
           return origSend.apply(this, arguments);

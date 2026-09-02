@@ -695,6 +695,12 @@
   const TT_STYLE_ID = "og-tt-meta-s";
   const TT_CACHE_LIMIT = 400;
   const TT_SRC_RANK = { dom: 1, state: 2, network: 3 };
+  const TT_LIKE_KEYS = ["diggCount", "digg_count", "likeCount", "like_count"];
+  const TT_COMMENT_KEYS = ["commentCount", "comment_count"];
+  // data-e2e 在不同页面有 like-count / browse-like-count / video-like-count 等变体，用包含匹配一次覆盖
+  const TT_LIKE_SEL = '[data-e2e*="like-count"], [data-e2e*="digg-count"]';
+  const TT_COMMENT_SEL = '[data-e2e*="comment-count"]';
+  const TT_COUNT_SEL = TT_LIKE_SEL + ", " + TT_COMMENT_SEL;
 
   const tikTokMetadataCache = new Map(); // videoId -> metadata
   let currentTikTokVideoId = null;       // 当前鼠标所在视频的 key（videoId，或无 id 时的元素 key）
@@ -867,15 +873,30 @@
     return NaN;
   }
 
-  // 判断一个对象是否是视频条目，并抽出 videoId / 作者 / 点赞 / 评论。
-  // 兼容 itemStruct / ItemModule / aweme_detail 等常见形态；author 可能是对象也可能是 uniqueId 字符串。
-  function ttItemMetadata(obj, source) {
+  // 只有"看起来是视频条目"的对象才允许作为 videoId 归属点，
+  // 否则 author.id / music.id（同样是 19 位数字）会把归属带偏
+  function ttLooksLikeItem(obj) {
+    return ("desc" in obj) || ("video" in obj) || ("stats" in obj) || ("statistics" in obj) ||
+      ("author" in obj) || ("createTime" in obj) || ("create_time" in obj) || ("statsV2" in obj);
+  }
+
+  // authorStats / 含 followerCount 的对象里的 diggCount 是"作者总获赞"，不是本视频的点赞
+  function ttIsAuthorStats(obj, parentKey) {
+    if (parentKey && /author/i.test(parentKey)) return true;
+    return ("followerCount" in obj) || ("follower_count" in obj) || ("followingCount" in obj) ||
+      ("heartCount" in obj) || ("heart" in obj);
+  }
+
+  // 抽出 videoId / 作者 / 点赞 / 评论。
+  // 作者与统计**不要求在同一个对象里**：只要能确定所属 videoId（自身 id 或最近的条目祖先 id），
+  // 就单独产出一份局部 metadata，由 ttCacheSet 按 videoId 合并。
+  function ttItemMetadata(obj, source, ownerId, parentKey) {
     if (!obj || typeof obj !== "object") return null;
-    const videoId = ttPickVideoId(obj);
+    const own = ttPickVideoId(obj);
+    const videoId = (own && ttLooksLikeItem(obj)) ? own : (ownerId || "");
     if (!videoId) return null;
     const author = obj.author !== undefined ? obj.author : obj.authorInfo;
     const stats = obj.stats || obj.statistics || obj.statsV2 || obj.stats_v2 || null;
-    if (!author && !stats) return null;
     let uniqueId = "";
     let nickname = "";
     if (typeof author === "string") {
@@ -884,8 +905,19 @@
       uniqueId = author.uniqueId || author.unique_id || author.uniqueID || "";
       nickname = author.nickname || author.nickName || "";
     }
-    const likeCount = ttPickCount(stats, ["diggCount", "digg_count", "likeCount", "like_count"]);
-    const commentCount = ttPickCount(stats, ["commentCount", "comment_count"]);
+    // 对象自身就是 author（作者对象在条目之外的层级）
+    if (!uniqueId && typeof obj.uniqueId === "string") uniqueId = obj.uniqueId;
+    if (!uniqueId && typeof obj.unique_id === "string") uniqueId = obj.unique_id;
+    if (!nickname && typeof obj.nickname === "string") nickname = obj.nickname;
+    const likeKeys = TT_LIKE_KEYS;
+    const commentKeys = TT_COMMENT_KEYS;
+    let likeCount = ttPickCount(stats, likeKeys);
+    let commentCount = ttPickCount(stats, commentKeys);
+    // 对象自身就是 stats（statistics 在条目之外的层级）
+    if (!ttIsAuthorStats(obj, parentKey)) {
+      if (!Number.isFinite(likeCount)) likeCount = ttPickCount(obj, likeKeys);
+      if (!Number.isFinite(commentCount)) commentCount = ttPickCount(obj, commentKeys);
+    }
     if (!uniqueId && !nickname && !Number.isFinite(likeCount) && !Number.isFinite(commentCount)) return null;
     return {
       videoId,
@@ -898,29 +930,53 @@
     };
   }
 
-  // 递归遍历任意结构，把所有能识别出的视频条目写入缓存；
-  // 指定 targetVideoId 时同时返回该视频的解析结果。
+  // 递归遍历任意结构：沿途记住"最近的视频条目 id"作为归属，
+  // 这样 author 和 statistics 分处不同层级时也能按同一个 videoId 归拢。
   function parseTikTokVideoMetadata(data, targetVideoId, source) {
     let hit = null;
     const budget = { nodes: 0 };
-    (function walk(node, depth) {
-      if (!node || typeof node !== "object" || depth > 14 || budget.nodes > 200000) return;
+    const itemIds = new Set();
+    const orphanStats = [];
+    (function walk(node, ownerId, parentKey, depth) {
+      if (!node || typeof node !== "object" || depth > 16 || budget.nodes > 200000) return;
       budget.nodes++;
       if (Array.isArray(node)) {
-        for (const v of node) walk(v, depth + 1);
+        for (const v of node) walk(v, ownerId, parentKey, depth + 1);
         return;
       }
-      const meta = ttItemMetadata(node, source);
+      const own = ttPickVideoId(node);
+      const isItem = !!own && ttLooksLikeItem(node);
+      const id = isItem ? own : ownerId;
+      if (isItem) itemIds.add(own);
+      const meta = ttItemMetadata(node, source, id, parentKey);
       if (meta) {
         const stored = ttCacheSet(meta);
         if (targetVideoId && meta.videoId === targetVideoId) hit = stored || meta;
+      } else if (!id && !ttIsAuthorStats(node, parentKey)) {
+        // 计数所在的对象没有任何 id 归属：先记下，等确认整份数据只对应一个视频再认领
+        const like = ttPickCount(node, TT_LIKE_KEYS);
+        const comment = ttPickCount(node, TT_COMMENT_KEYS);
+        if (Number.isFinite(like) || Number.isFinite(comment)) orphanStats.push({ like, comment });
       }
       for (const k in node) {
         const v = node[k];
-        if (v && typeof v === "object") walk(v, depth + 1);
+        if (v && typeof v === "object") walk(v, id, k, depth + 1);
       }
-    })(data, 0);
-    return hit;
+    })(data, "", "", 0);
+    // 整份数据里只有一个视频时，游离的 statistics 只可能属于它——这是唯一解，不是猜测。
+    // 有多个视频就一律丢弃，宁可显示 … 也不认错人。
+    if (itemIds.size === 1 && orphanStats.length) {
+      const only = itemIds.values().next().value;
+      for (const s of orphanStats) {
+        const stored = ttCacheSet({
+          videoId: only, author: "", nickname: "",
+          likeCount: s.like, commentCount: s.comment,
+          source: source || "state", timestamp: Date.now(),
+        });
+        if (targetVideoId && only === targetVideoId) hit = stored || hit;
+      }
+    }
+    return hit || (targetVideoId ? tikTokMetadataCache.get(targetVideoId) || null : null);
   }
 
   // 从字符串位置 start（必须指向 '{'）起做字符串感知的花括号配对，取出完整对象片段
@@ -944,23 +1000,60 @@
   }
 
   // 网络拦截数据：__og-net 只带前 50000 字符，整体常常不是合法 JSON。
-  // 能整体解析就整体遍历；否则只抓 {"id":"<19位>" 开头的完整对象，逐个精确解析，绝不跨对象取字段。
+  // 能整体解析就整体遍历；否则抓出完整的条目对象逐个精确解析，绝不跨对象取字段。
+  // 条目起点同时支持 {"id":"<19位>" 与 "itemStruct"/"item"/"aweme_detail"/"aweme" 包装层。
   function parseTikTokNetworkMetadata(text) {
     if (!IS_TIKTOK || !text) return;
     try {
       parseTikTokVideoMetadata(JSON.parse(text), null, "network");
       return;
     } catch {}
-    const re = /\{"id":"(\d{15,})"/g;
-    let m, parsed = 0;
-    while ((m = re.exec(text)) !== null && parsed < 40) {
-      const slice = ttSliceObject(text, m.index);
+    const starts = [];
+    const idRe = /\{"(?:id|aweme_id|awemeId|itemId)":"?\d{15,}/g;
+    let m;
+    while ((m = idRe.exec(text)) !== null && starts.length < 60) starts.push(m.index);
+    const wrapRe = /"(?:itemStruct|itemInfo|item|aweme_detail|aweme)"\s*:\s*\{/g;
+    while ((m = wrapRe.exec(text)) !== null && starts.length < 120) {
+      starts.push(m.index + m[0].length - 1);
+    }
+    let parsed = 0;
+    for (const start of starts) {
+      if (parsed >= 40) break;
+      const slice = ttSliceObject(text, start);
       if (!slice) continue;
       try {
-        const meta = ttItemMetadata(JSON.parse(slice), "network");
-        if (meta) { ttCacheSet(meta); parsed++; }
+        // 包装层内部可能还有嵌套（itemInfo → itemStruct），交给递归解析器按 videoId 归属
+        parseTikTokVideoMetadata(JSON.parse(slice), null, "network");
+        parsed++;
       } catch {}
     }
+  }
+
+  // 统计字段常常落在 __og-net 的 50000 字符截断之外，所以 background 注入的 MAIN world
+  // 拦截器会就着完整响应额外派发一个极小的 __og-tt-meta 事件
+  // （每项 {id, author?, nickname?, likeCount?, commentCount?}）。
+  // 这里只按 videoId 入缓存，由 ttCacheSet 合并，不做任何跨条目猜测。
+  function handleTikTokMetaEvent(detail) {
+    let list = null;
+    try { list = JSON.parse(detail); } catch { return; }
+    if (!Array.isArray(list)) return;
+    let n = 0;
+    for (const it of list) {
+      if (!it || !/^\d{15,}$/.test(String(it.id || ""))) continue;
+      const like = it.likeCount === undefined || it.likeCount === null ? NaN : Number(it.likeCount);
+      const comment = it.commentCount === undefined || it.commentCount === null ? NaN : Number(it.commentCount);
+      ttCacheSet({
+        videoId: String(it.id),
+        author: typeof it.author === "string" ? it.author : "",
+        nickname: typeof it.nickname === "string" ? it.nickname : "",
+        likeCount: Number.isFinite(like) ? like : NaN,
+        commentCount: Number.isFinite(comment) ? comment : NaN,
+        source: "network",
+        timestamp: Date.now(),
+      });
+      n++;
+    }
+    if (n) ttRefreshCurrentPanel();
   }
 
   // 页面内嵌状态：__UNIVERSAL_DATA_FOR_REHYDRATION__ 优先，其次 SIGI_STATE。
@@ -1003,7 +1096,9 @@
     );
     if (uniqueEl) author = (uniqueEl.textContent || "").trim();
     if (!author) {
-      const link = container.querySelector('a[href*="/@"]');
+      // 容器万一偏大，优先取与当前 videoId 对应的那条链接，避免拿成别人的作者
+      const link = (videoId && container.querySelector(`a[href*="/video/${videoId}"]`)) ||
+        container.querySelector('a[href*="/@"]');
       const href = link ? link.getAttribute("href") || "" : "";
       const m = href.match(/\/@([\w.\-]+)/);
       if (m) author = m[1];
@@ -1014,8 +1109,16 @@
     }
     const nickEl = container.querySelector('[data-e2e="browse-author-name"], [data-e2e="video-author-nickname"]');
     if (nickEl) nickname = (nickEl.textContent || "").trim();
-    const likeEl = container.querySelector('[data-e2e="like-count"], [data-e2e="browse-like-count"]');
-    const commentEl = container.querySelector('[data-e2e="comment-count"], [data-e2e="browse-comment-count"]');
+    // data-e2e 在不同页面有 like-count / browse-like-count / video-like-count 等变体，用包含匹配一次覆盖
+    let likeEl = container.querySelector(TT_LIKE_SEL);
+    let commentEl = container.querySelector(TT_COMMENT_SEL);
+    // 单视频页（/@user/video/<id>）：页面主视频就是它，此时才允许放宽到整页去找计数，
+    // 其它页面绝不整页查询，避免拿到别的视频的数字
+    const urlId = (location.pathname.match(/\/video\/(\d{15,})/) || [])[1] || "";
+    if (videoId && urlId && videoId === urlId) {
+      if (!likeEl) likeEl = document.querySelector(TT_LIKE_SEL);
+      if (!commentEl) commentEl = document.querySelector(TT_COMMENT_SEL);
+    }
     const likeCount = likeEl ? ttParseCountText(likeEl.textContent) : NaN;
     const commentCount = commentEl ? ttParseCountText(commentEl.textContent) : NaN;
     if (!author && !nickname && !Number.isFinite(likeCount) && !Number.isFinite(commentCount)) return null;
@@ -1117,17 +1220,40 @@
     return { hit, container: ttVideoContainer(hit) };
   }
 
-  // 找到"这一个视频"的容器：优先命中元素自身/最近的带点赞数的节点（DOM 兜底要 scoped 到它），其次已标记卡片
+  // 找到"这一个视频"的容器：DOM 兜底必须 scoped 到它。
+  // 上溯时有三道边界，防止越过卡片拿到别的视频的数字：
+  //   1) 不允许上到 body / html
+  //   2) 命中已标记卡片 [data-og-c] 就停在卡片
+  //   3) 候选容器里出现两个以上不同 videoId 的链接，说明已经跨到多视频容器，弃用
   function ttVideoContainer(el) {
     let marked = null;
     try { marked = el.closest ? el.closest(`[${CARD}]`) : null; } catch {}
     let node = el;
-    for (let i = 0; i < 9 && node; i++) {
-      if (node.querySelector && node.querySelector('[data-e2e="like-count"], [data-e2e="browse-like-count"]')) return node;
+    for (let i = 0; i < 14 && node; i++) {
+      if (node === document.body || node === document.documentElement) break;
       if (!marked && node.getAttribute && node.getAttribute(CARD)) marked = node;
+      if (node.querySelector && node.querySelector(TT_COUNT_SEL)) {
+        if (ttDistinctVideoIds(node) > 1) break;
+        return node;
+      }
+      if (marked && node === marked) break;
       node = node.parentElement;
     }
     return marked || el;
+  }
+
+  function ttDistinctVideoIds(node) {
+    try {
+      if (!node.querySelectorAll) return 0;
+      const ids = new Set();
+      node.querySelectorAll('a[href*="/video/"]').forEach((a) => {
+        const m = (a.getAttribute("href") || "").match(/\/video\/(\d{15,})/);
+        if (m) ids.add(m[1]);
+      });
+      return ids.size;
+    } catch {
+      return 0;
+    }
   }
 
   function ttElementKey(el) {
@@ -1171,9 +1297,12 @@
       if (!key) { hideTikTokMetadataPanel(); return; }
 
       if (key === currentTikTokVideoId) {
-        // 同一个视频：数据后到（网络/状态解析完成）时补一次
+        // 同一个视频：数据后到（网络到达、DOM 渲染出计数）时补齐，已完整就不再重算
         const cached = videoId ? tikTokMetadataCache.get(videoId) : null;
-        if (cached) showTikTokMetadataPanel(cached);
+        if (ttMetaComplete(cached)) { showTikTokMetadataPanel(cached); return; }
+        const refreshed = getTikTokMetadata(videoId, found.container);
+        if (key !== currentTikTokVideoId) return;
+        if (refreshed) showTikTokMetadataPanel(refreshed);
         return;
       }
 
@@ -1206,6 +1335,11 @@
 
   function initTikTokMetadataPanel() {
     if (!IS_TIKTOK) return;
+
+    // MAIN world 拦截器就着完整响应派发的紧凑统计数据（点赞 / 评论）
+    window.addEventListener("__og-tt-meta", (e) => {
+      try { handleTikTokMetaEvent(e.detail); } catch (error) { ttLog("统计事件处理失败", error); }
+    });
 
     let pendingPoint = null;
     let frame = null;
