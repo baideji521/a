@@ -1231,13 +1231,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 ('heartCount' in node) || ('heart' in node) || ('followingCount' in node);
               const like = authorish ? undefined : num(node.diggCount !== undefined ? node.diggCount : node.digg_count);
               const comment = authorish ? undefined : num(node.commentCount !== undefined ? node.commentCount : node.comment_count);
+              // 播放量只跟着"确实带点赞/评论的视频 stats"一起走，
+              // 所以 challenge.stats / music.stats / authorStats 里的 viewCount 不会被误当成视频播放量
+              const view = authorish ? undefined : num(
+                node.playCount !== undefined ? node.playCount
+                  : node.play_count !== undefined ? node.play_count
+                  : node.viewCount !== undefined ? node.viewCount
+                  : node.view_count);
               if (id) {
-                if (like !== undefined || comment !== undefined) out.push({ id: id, likeCount: like, commentCount: comment });
+                if (like !== undefined || comment !== undefined) out.push({ id: id, likeCount: like, commentCount: comment, viewCount: view });
                 const uid = node.uniqueId || node.unique_id || node.uniqueID;
                 if (typeof uid === 'string' && uid) out.push({ id: id, author: uid, nickname: typeof node.nickname === 'string' ? node.nickname : '' });
               } else if (like !== undefined || comment !== undefined) {
                 // 计数对象没有 id 归属：先记下，等确认整份响应只有一个视频再认领
-                orphans.push({ likeCount: like, commentCount: comment });
+                orphans.push({ likeCount: like, commentCount: comment, viewCount: view });
               }
               for (const k in node) {
                 const v = node[k];
@@ -1248,7 +1255,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             if (ids.size === 1 && orphans.length) {
               const only = ids.values().next().value;
               for (let i = 0; i < orphans.length; i++) {
-                out.push({ id: only, likeCount: orphans[i].likeCount, commentCount: orphans[i].commentCount });
+                out.push({ id: only, likeCount: orphans[i].likeCount, commentCount: orphans[i].commentCount, viewCount: orphans[i].viewCount });
               }
             }
             if (out.length) {
