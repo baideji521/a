@@ -865,9 +865,12 @@
     };
   }
 
+  // 五个字段都到位才算完整。少了播放量或时长就必须继续往页面状态 / DOM 补，
+  // 否则网络通道先把作者+点赞+评论写进缓存后会直接提前返回，viewCount / duration 永远补不上。
   function ttMetaComplete(meta) {
     return !!meta && !!(meta.author || meta.nickname) &&
-      Number.isFinite(meta.likeCount) && Number.isFinite(meta.commentCount);
+      Number.isFinite(meta.likeCount) && Number.isFinite(meta.commentCount) &&
+      Number.isFinite(meta.viewCount) && Number.isFinite(meta.duration);
   }
 
   function ttCacheSet(meta) {
