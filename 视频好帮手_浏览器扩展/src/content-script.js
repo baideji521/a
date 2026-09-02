@@ -697,15 +697,19 @@
   const TT_SRC_RANK = { dom: 1, state: 2, network: 3 };
   const TT_LIKE_KEYS = ["diggCount", "digg_count", "likeCount", "like_count"];
   const TT_COMMENT_KEYS = ["commentCount", "comment_count"];
+  const TT_VIEW_KEYS = ["playCount", "play_count", "viewCount", "view_count"];
   // data-e2e 在不同页面有 like-count / browse-like-count / video-like-count 等变体，用包含匹配一次覆盖
   const TT_LIKE_SEL = '[data-e2e*="like-count"], [data-e2e*="digg-count"]';
   const TT_COMMENT_SEL = '[data-e2e*="comment-count"]';
+  const TT_VIEW_SEL = '[data-e2e*="video-views"], [data-e2e*="play-count"]';
   const TT_COUNT_SEL = TT_LIKE_SEL + ", " + TT_COMMENT_SEL;
 
   const tikTokMetadataCache = new Map(); // videoId -> metadata
   let currentTikTokVideoId = null;       // 当前鼠标所在视频的 key（videoId，或无 id 时的元素 key）
   let ttPanel = null;
   let ttAuthorEl = null;
+  let ttDurationEl = null;
+  let ttViewEl = null;
   let ttLikeEl = null;
   let ttCommentEl = null;
   let ttStateSignature = "";             // 页面状态脚本的指纹，避免重复解析
@@ -732,6 +736,19 @@
     if (n < 1e9) { const m = n / 1e6; return (m < 100 ? ttTrimDecimal(m) : String(Math.round(m))) + "M"; }
     const b = n / 1e9;
     return (b < 100 ? ttTrimDecimal(b) : String(Math.round(b))) + "B";
+  }
+
+  // 秒 → MM:SS（超过 1 小时用 HH:MM:SS）。拿不到时长返回空串，由调用方显示 …
+  function formatTikTokDuration(seconds) {
+    if (seconds === null || seconds === undefined || seconds === "") return "";
+    const n = typeof seconds === "number" ? seconds : Number(seconds);
+    if (!Number.isFinite(n) || n < 0) return "";
+    const total = Math.round(n);
+    const s = total % 60;
+    const m = Math.floor(total / 60) % 60;
+    const h = Math.floor(total / 3600);
+    const pad = (v) => (v < 10 ? "0" + v : String(v));
+    return h > 0 ? h + ":" + pad(m) + ":" + pad(s) : pad(m) + ":" + pad(s);
   }
 
   // DOM 上的数字已经是 "12.4K" / "1.2万" 这种展示形态，反解成数值再统一格式化
@@ -779,6 +796,12 @@
     el.setAttribute(DONE, "1"); // 让下载按钮的扫描逻辑跳过它
     const author = document.createElement("div");
     author.className = "author";
+    const media = document.createElement("div");
+    media.className = "stats";
+    const dur = document.createElement("span");
+    const view = document.createElement("span");
+    media.appendChild(dur);
+    media.appendChild(view);
     const stats = document.createElement("div");
     stats.className = "stats";
     const like = document.createElement("span");
@@ -786,10 +809,13 @@
     stats.appendChild(like);
     stats.appendChild(comment);
     el.appendChild(author);
+    el.appendChild(media);
     el.appendChild(stats);
     root.appendChild(el);
     ttPanel = el;
     ttAuthorEl = author;
+    ttDurationEl = dur;
+    ttViewEl = view;
     ttLikeEl = like;
     ttCommentEl = comment;
     return ttPanel;
@@ -802,7 +828,11 @@
     const author = "@" + (name || "unknown");
     const like = "❤️ " + (meta && Number.isFinite(meta.likeCount) ? formatTikTokCount(meta.likeCount) : "…");
     const comment = "💬 " + (meta && Number.isFinite(meta.commentCount) ? formatTikTokCount(meta.commentCount) : "…");
+    const dur = "⏱ " + (meta ? (formatTikTokDuration(meta.duration) || "…") : "…");
+    const view = "▶ " + (meta && Number.isFinite(meta.viewCount) ? formatTikTokCount(meta.viewCount) : "…");
     if (ttAuthorEl.textContent !== author) ttAuthorEl.textContent = author;
+    if (ttDurationEl.textContent !== dur) ttDurationEl.textContent = dur;
+    if (ttViewEl.textContent !== view) ttViewEl.textContent = view;
     if (ttLikeEl.textContent !== like) ttLikeEl.textContent = like;
     if (ttCommentEl.textContent !== comment) ttCommentEl.textContent = comment;
     panel.classList.add("og-tt-on");
@@ -828,6 +858,8 @@
       nickname: hi.nickname || lo.nickname || "",
       likeCount: Number.isFinite(hi.likeCount) ? hi.likeCount : lo.likeCount,
       commentCount: Number.isFinite(hi.commentCount) ? hi.commentCount : lo.commentCount,
+      viewCount: Number.isFinite(hi.viewCount) ? hi.viewCount : lo.viewCount,
+      duration: Number.isFinite(hi.duration) ? hi.duration : lo.duration,
       source: hi.source || lo.source || "",
       timestamp: Math.max(hi.timestamp || 0, lo.timestamp || 0),
     };
@@ -871,6 +903,21 @@
       if (Number.isFinite(n) && n >= 0) return n;
     }
     return NaN;
+  }
+
+  // 时长：只读真实字段（video.duration / duration / videoMeta.duration），不靠播放进度推算。
+  // TikTok web 的 video.duration 是秒，app 风格接口是毫秒，超过 10 小时的值按毫秒处理。
+  function ttPickDuration(obj) {
+    if (!obj || typeof obj !== "object") return NaN;
+    const raw = [obj.video, obj.videoMeta, obj]
+      .filter((o) => o && typeof o === "object")
+      .map((o) => (o.duration !== undefined ? o.duration : o.durationSec !== undefined ? o.durationSec : o.duration_sec))
+      .find((v) => v !== undefined && v !== null && v !== "");
+    if (raw === undefined) return NaN;
+    let n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return NaN;
+    if (n > 36000) n = n / 1000;
+    return n > 0 && n < 86400 ? n : NaN;
   }
 
   // 只有"看起来是视频条目"的对象才允许作为 videoId 归属点，
@@ -918,13 +965,27 @@
       if (!Number.isFinite(likeCount)) likeCount = ttPickCount(obj, likeKeys);
       if (!Number.isFinite(commentCount)) commentCount = ttPickCount(obj, commentKeys);
     }
-    if (!uniqueId && !nickname && !Number.isFinite(likeCount) && !Number.isFinite(commentCount)) return null;
+    // 播放量：优先条目自己的 stats/statistics；对象自身就是 stats 时也认，
+    // 但必须同时带 digg/comment 计数，否则 challenge/music 的 viewCount 会被误当成视频播放量
+    let viewCount = ttPickCount(stats, TT_VIEW_KEYS);
+    if (!Number.isFinite(viewCount) && !ttIsAuthorStats(obj, parentKey) &&
+        (Number.isFinite(ttPickCount(obj, likeKeys)) || Number.isFinite(ttPickCount(obj, commentKeys)))) {
+      viewCount = ttPickCount(obj, TT_VIEW_KEYS);
+    }
+    // 时长只认"条目本身"或它的 video / videoMeta 子对象，
+    // 否则 music.duration（配乐长度）会被当成视频时长
+    const duration = ((own && ttLooksLikeItem(obj)) || /^video/i.test(parentKey || ""))
+      ? ttPickDuration(obj) : NaN;
+    if (!uniqueId && !nickname && !Number.isFinite(likeCount) && !Number.isFinite(commentCount) &&
+        !Number.isFinite(viewCount) && !Number.isFinite(duration)) return null;
     return {
       videoId,
       author: typeof uniqueId === "string" ? uniqueId : "",
       nickname: typeof nickname === "string" ? nickname : "",
       likeCount,
       commentCount,
+      viewCount,
+      duration,
       source: source || "state",
       timestamp: Date.now(),
     };
@@ -1042,12 +1103,16 @@
       if (!it || !/^\d{15,}$/.test(String(it.id || ""))) continue;
       const like = it.likeCount === undefined || it.likeCount === null ? NaN : Number(it.likeCount);
       const comment = it.commentCount === undefined || it.commentCount === null ? NaN : Number(it.commentCount);
+      const view = it.viewCount === undefined || it.viewCount === null ? NaN : Number(it.viewCount);
+      const dur = it.duration === undefined || it.duration === null ? NaN : Number(it.duration);
       ttCacheSet({
         videoId: String(it.id),
         author: typeof it.author === "string" ? it.author : "",
         nickname: typeof it.nickname === "string" ? it.nickname : "",
         likeCount: Number.isFinite(like) ? like : NaN,
         commentCount: Number.isFinite(comment) ? comment : NaN,
+        viewCount: Number.isFinite(view) ? view : NaN,
+        duration: Number.isFinite(dur) && dur > 0 ? (dur > 36000 ? dur / 1000 : dur) : NaN,
         source: "network",
         timestamp: Date.now(),
       });
@@ -1115,19 +1180,29 @@
     // 单视频页（/@user/video/<id>）：页面主视频就是它，此时才允许放宽到整页去找计数，
     // 其它页面绝不整页查询，避免拿到别的视频的数字
     const urlId = (location.pathname.match(/\/video\/(\d{15,})/) || [])[1] || "";
+    let viewEl = container.querySelector(TT_VIEW_SEL);
     if (videoId && urlId && videoId === urlId) {
       if (!likeEl) likeEl = document.querySelector(TT_LIKE_SEL);
       if (!commentEl) commentEl = document.querySelector(TT_COMMENT_SEL);
+      if (!viewEl) viewEl = document.querySelector(TT_VIEW_SEL);
     }
     const likeCount = likeEl ? ttParseCountText(likeEl.textContent) : NaN;
     const commentCount = commentEl ? ttParseCountText(commentEl.textContent) : NaN;
-    if (!author && !nickname && !Number.isFinite(likeCount) && !Number.isFinite(commentCount)) return null;
+    const viewCount = viewEl ? ttParseCountText(viewEl.textContent) : NaN;
+    // 时长兜底：读当前容器里 <video> 元素自带的真实媒体时长（不是播放进度）
+    let duration = NaN;
+    const videoEl = container.tagName === "VIDEO" ? container : container.querySelector("video");
+    if (videoEl && Number.isFinite(videoEl.duration) && videoEl.duration > 0) duration = videoEl.duration;
+    if (!author && !nickname && !Number.isFinite(likeCount) && !Number.isFinite(commentCount) &&
+        !Number.isFinite(viewCount) && !Number.isFinite(duration)) return null;
     return {
       videoId: videoId || "",
       author,
       nickname,
       likeCount,
       commentCount,
+      viewCount,
+      duration,
       source: "dom",
       timestamp: Date.now(),
     };
