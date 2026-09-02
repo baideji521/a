@@ -4,8 +4,9 @@ import { createActionFeedbackController } from "./action-feedback.js";
 import { registerSnifferListeners, getMediaCount, getMediaCountForPage, getDetectedMedia, getDetectedMediaForUrl, getPageKeyForTab, restoreMedia } from "./media-sniffer.js";
 import { summarizeCookies } from "./cookie-summary.js";
 import { loadSnifferState, isSnifferEnabled, setSnifferEnabled } from "./sniffer-toggle.js";
-import { registerContextMenu, getContextMenuId, getTikTokSearchMenuId, getCopyUrlMenuId, getCopyTitleMenuId } from "./context-menu.js";
+import { registerContextMenu, getContextMenuId, getTikTokSearchMenuId, getGoogleSearchMenuId, getGoogleImageSearchMenuId, getPairMenuId, getCopyUrlMenuId, getCopyTitleMenuId } from "./context-menu.js";
 import { openVideoHelperScheme } from "./send-via-scheme.js";
+import { loadOpenAppState } from "./open-app-toggle.js";
 import {
   sendViaBridge,
   sendCookiesViaBridge,
@@ -154,6 +155,32 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     await handleTikTokSearch(tab);
     return;
   }
+
+  // ---- Google 搜索 ----
+  if (info.menuItemId === getGoogleSearchMenuId()) {
+    await handleGoogleSearch(tab);
+    return;
+  }
+
+  // ---- Google 图片搜索 ----
+  if (info.menuItemId === getGoogleImageSearchMenuId()) {
+    await handleGoogleImageSearch(tab);
+    return;
+  }
+
+  // ---- 配对：打开配对/设置页面 ----
+  if (info.menuItemId === getPairMenuId()) {
+    try {
+      await chrome.runtime.openOptionsPage();
+    } catch (e) {
+      // openOptionsPage 偶发失败时直接开页面地址
+      console.log("[视频好帮手] openOptionsPage 失败，改为直接打开:", e?.message || e);
+      chrome.tabs.create({ url: chrome.runtime.getURL("pages/options.html") });
+    }
+    return;
+  }
+
+
 
   // ---- 复制当前视频地址 ----
   if (info.menuItemId === getCopyUrlMenuId()) {
@@ -374,11 +401,17 @@ async function extractTitleFromPageContext(tabId, videoId) {
   }
 }
 
-// 处理"TikTok搜索"右键菜单点击
-async function handleTikTokSearch(tab) {
-  if (!tab?.id) return;
+// ============================================================
+// 标题提取 + 搜索关键词（TikTok搜索 与 Google 搜索共用）
+//
+// 这两个函数是从原 handleTikTokSearch 里原样拆出来的，逻辑一字未改，
+// 目的只是让 Google 搜索复用同一份标题来源和同一套关键词规则。
+// ============================================================
 
-  // 获取视频标题
+// 标题提取链：1 内容脚本 → 2 world:MAIN 页面上下文 → 3 tab.title 兜底
+async function extractSearchTitle(tab) {
+  if (!tab?.id) return "";
+
   let title = "";
   try {
     const response = await chrome.tabs.sendMessage(tab.id, { type: "getVideoTitle" });
@@ -395,16 +428,457 @@ async function handleTikTokSearch(tab) {
     title = tab.title || "";
   }
 
-  // 提取第一个 # 后的内容，将 # 替换为空格
-  const hashIndex = title.indexOf("#");
-  if (hashIndex === -1) return; // 没有 # 则不触发任何动作
+  return title;
+}
 
-  const query = title.substring(hashIndex + 1).replace(/#/g, " ").trim();
-  if (!query) return;
+// 关键词规则：提取第一个 # 后的内容，将 # 替换为空格
+// 没有 # 或结果为空时返回 ""，由调用方决定怎么处理
+function buildSearchQuery(title) {
+  const hashIndex = title.indexOf("#");
+  if (hashIndex === -1) return "";
+  return title.substring(hashIndex + 1).replace(/#/g, " ").trim();
+}
+
+// 处理"TikTok搜索"右键菜单点击
+async function handleTikTokSearch(tab) {
+  if (!tab?.id) return;
+
+  const title = await extractSearchTitle(tab);
+  const query = buildSearchQuery(title);
+  if (!query) return; // 没有 # 或关键词为空则不触发任何动作
 
   const searchUrl = `https://www.tiktok.com/search/video?q=${encodeURIComponent(query)}`;
   chrome.tabs.create({ url: searchUrl });
 }
+
+// ============================================================
+// Google 搜索（文字）
+// ============================================================
+
+// 不加任何 site: 白名单，也不加任何排除项，
+// 直接用标题原文搜，结果范围完全交给 Google。
+function buildGoogleSearchUrl(query) {
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+// 处理"🔎 Google 搜索"右键菜单点击。
+// 搜索词完全来自 TikTok搜索 那一套：extractSearchTitle → buildSearchQuery。
+// 打开结果页后立即结束，不解析、不抓取、不调用 bridge、不建任务。
+async function handleGoogleSearch(tab) {
+  if (!tab?.id) return;
+
+  const title = await extractSearchTitle(tab);
+  const query = buildSearchQuery(title);
+
+  if (!query) {
+    await showSimpleToast(tab, "未获取到有效标题。");
+    return;
+  }
+
+  chrome.tabs.create({ url: buildGoogleSearchUrl(query) });
+}
+
+// ============================================================
+// Google 图片搜索（当前剪贴板里的完整原图）
+// ============================================================
+
+const LENS_PAGE_URL = "https://lens.google.com/?hl=zh-CN";
+const LENS_UPLOAD_TIMEOUT_MS = 45000;
+
+// Lens 上传端点。参数照 Chrome 自己「用 Google 搜索图片」时的取值。
+function buildLensUploadUrl() {
+  const params = new URLSearchParams({
+    ep: "ccm",
+    re: "dcsp",
+    s: "4",
+    st: String(Date.now()),
+    sideimagesearch: "1",
+    vpw: "1280",
+    vph: "900",
+  });
+  return `https://lens.google.com/v3/upload?${params.toString()}`;
+}
+
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// Lens 返回的结果页 URL 里带区域参数，会让页面上出现一个自动框选。
+// 我们要的是整张图，所以把区域相关参数去掉再打开。
+// vsint = 区域信息（中心点/宽高比例），vsdim = 显示尺寸。
+// vsrid 是本次上传的会话 id，必须保留。
+const LENS_REGION_PARAMS = ["vsint", "vsdim"];
+
+function stripLensRegion(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    for (const key of LENS_REGION_PARAMS) u.searchParams.delete(key);
+    return u.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+// 主路径：直接 POST 原图到 Lens 上传端点，跟随 303 拿到结果页 URL，
+// 然后新建标签页打开它。不需要模拟页面上传，也就不受 Lens 前端改版影响。
+async function uploadToLensAndGetUrl(base64, mime) {
+  const bytes = base64ToBytes(base64);
+  const form = new FormData();
+  form.append("encoded_image", new Blob([bytes], { type: mime || "image/png" }), "clipboard.png");
+  form.append("original_width", "0");
+  form.append("original_height", "0");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LENS_UPLOAD_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(buildLensUploadUrl(), {
+      method: "POST",
+      body: form,
+      credentials: "include",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+
+    const finalUrl = response.url || "";
+    if (!finalUrl || !/[?&]vsrid=/.test(finalUrl)) {
+      return { ok: false, reason: "no-vsrid", status: response.status };
+    }
+    return { ok: true, url: stripLensRegion(finalUrl) };
+  } catch (e) {
+    return { ok: false, reason: "upload-failed", message: e?.message || String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// 在当前标签页里读剪贴板。必须在有焦点的文档里执行，
+// service worker 自己没有 document，读不到。
+// 全程走 clipboard.read() → Blob → ArrayBuffer，不经过 canvas，
+// 所以不存在缩放/裁剪/重编码，拿到的就是剪贴板里的原始字节。
+async function readClipboardImage(tabId) {
+  try {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async () => {
+        if (!navigator.clipboard?.read) return { ok: false, reason: "no-api" };
+
+        let items;
+        try {
+          items = await navigator.clipboard.read();
+        } catch (e) {
+          return { ok: false, reason: "read-denied", message: e?.message || String(e) };
+        }
+
+        for (const item of items) {
+          const mime = (item.types || []).find((t) => t.startsWith("image/"));
+          if (!mime) continue;
+
+          const blob = await item.getType(mime);
+          const buffer = await blob.arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+
+          // 分块转 base64，避免大图触发 apply 的参数上限
+          let binary = "";
+          const CHUNK = 0x8000;
+          for (let i = 0; i < bytes.length; i += CHUNK) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+          }
+
+          return { ok: true, mime, size: bytes.length, base64: btoa(binary) };
+        }
+
+        return { ok: false, reason: "not-image" };
+      },
+    });
+
+    return injected?.result || { ok: false, reason: "inject-failed" };
+  } catch (e) {
+    return { ok: false, reason: "inject-failed", message: e?.message || String(e) };
+  }
+}
+
+// 等标签页加载完成
+function waitForTabComplete(tabId, timeoutMs = 30000) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(false);
+    }, timeoutMs);
+    function listener(updatedTabId, changeInfo) {
+      if (updatedTabId === tabId && changeInfo.status === "complete") {
+        clearTimeout(timer);
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(true);
+      }
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+}
+
+// Lens 结果页会自己跑目标检测，在图上画一个小选框，只搜那一块。
+// URL 参数控制不了它（vsint 里的区域本来就是整图，前端仍然自己重新框）。
+// 所以打开结果页后模拟一次拖拽，把选框从左上角拉到右下角，覆盖整张图。
+//
+// 注意：这是唯一一处会去碰 Google 页面 DOM 的代码，只做"拉满选框"这一件事，
+// 不读结果、不点其他按钮、不关标签页。Lens 前端改版后可能失效，
+// 失效时只是选框保持原样，不影响页面正常使用。
+async function expandLensSelection(tabId) {
+  try {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async () => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+        // 上传的那张图是预览区里面积最大的 <img>
+        function findImage() {
+          let best = null;
+          let bestArea = 0;
+          for (const img of document.querySelectorAll("img")) {
+            const r = img.getBoundingClientRect();
+            if (r.width < 80 || r.height < 80) continue;
+            const area = r.width * r.height;
+            if (area > bestArea) {
+              best = img;
+              bestArea = area;
+            }
+          }
+          return best;
+        }
+
+        let img = null;
+        for (let i = 0; i < 80; i += 1) {
+          img = findImage();
+          if (img) break;
+          await sleep(250);
+        }
+        if (!img) return { ok: false, reason: "no-image" };
+
+        // 先等 Lens 把它自己的自动选框画完，否则我们拉完会被它覆盖回去
+        await sleep(1500);
+
+        const rect = img.getBoundingClientRect();
+        if (rect.width < 80 || rect.height < 80) return { ok: false, reason: "image-too-small" };
+
+        const inset = 3;
+        const x1 = rect.left + inset;
+        const y1 = rect.top + inset;
+        const x2 = rect.right - inset;
+        const y2 = rect.bottom - inset;
+
+        // 拖拽要一直发给同一个元素（指针捕获语义），取起点处最上层的那个
+        const target = document.elementFromPoint(x1 + 1, y1 + 1) || img;
+
+        function fire(type, x, y) {
+          const down = type !== "pointerup" && type !== "mouseup";
+          const init = {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            clientX: x,
+            clientY: y,
+            screenX: x,
+            screenY: y,
+            button: 0,
+            buttons: down ? 1 : 0,
+          };
+          // 指针事件和鼠标事件都发一遍，兼容不同实现
+          if (type.startsWith("pointer")) {
+            let ev;
+            try {
+              ev = new PointerEvent(type, { ...init, pointerId: 1, pointerType: "mouse", isPrimary: true });
+            } catch {
+              ev = new MouseEvent(type.replace("pointer", "mouse"), init);
+            }
+            target.dispatchEvent(ev);
+          } else {
+            target.dispatchEvent(new MouseEvent(type, init));
+          }
+        }
+
+        fire("pointerdown", x1, y1);
+        fire("mousedown", x1, y1);
+
+        const STEPS = 14;
+        for (let i = 1; i <= STEPS; i += 1) {
+          const x = x1 + ((x2 - x1) * i) / STEPS;
+          const y = y1 + ((y2 - y1) * i) / STEPS;
+          fire("pointermove", x, y);
+          fire("mousemove", x, y);
+          await sleep(25);
+        }
+
+        fire("pointerup", x2, y2);
+        fire("mouseup", x2, y2);
+
+        return {
+          ok: true,
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+          tag: target.tagName,
+        };
+      },
+    });
+
+    return injected?.result || { ok: false, reason: "inject-failed" };
+  } catch (e) {
+    return { ok: false, reason: "inject-failed", message: e?.message || String(e) };
+  }
+}
+
+// 兜底路径：打开 lens.google.com，把图片塞进页面自己的
+// <input type=file name=encoded_image>，触发它原本的上传流程。
+// 只在主路径 POST 失败时才走这里。
+async function openLensPageAndInject(base64, mime) {
+  const tab = await chrome.tabs.create({ url: LENS_PAGE_URL, active: true });
+  if (!tab?.id) return { ok: false, reason: "no-tab" };
+
+  const loaded = await waitForTabComplete(tab.id);
+  if (!loaded) return { ok: false, reason: "load-timeout" };
+
+  try {
+    const ext = (mime || "image/png").split("/")[1] || "png";
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      args: [base64, mime || "image/png", `clipboard.${ext}`],
+      func: async (b64, type, name) => {
+        const findInput = () =>
+          document.querySelector('input[type="file"][name="encoded_image"]') ||
+          document.querySelector('input[type="file"]');
+
+        let input = null;
+        for (let i = 0; i < 60; i += 1) {
+          input = findInput();
+          if (input) break;
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        if (!input) return { ok: false, reason: "no-file-input" };
+
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+        const file = new File([bytes], name, { type });
+
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return { ok: true };
+      },
+    });
+
+    if (!injected?.result?.ok) {
+      return { ok: false, reason: injected?.result?.reason || "inject-failed" };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: "inject-failed", message: e?.message || String(e) };
+  }
+}
+
+// 处理"🔍 Google 图片搜索"右键菜单点击
+async function handleGoogleImageSearch(tab) {
+  if (!tab?.id) return;
+
+  const clip = await readClipboardImage(tab.id);
+
+  if (!clip.ok) {
+    // 剪贴板里不是图片 / 读不到：只提示，不打开 Google
+    const message =
+      clip.reason === "not-image" || clip.reason === "no-api"
+        ? "剪贴板中没有图片，请先复制一张图片。"
+        : "读取剪贴板失败，请点击页面后重试。";
+    console.log("[视频好帮手] Google 图片搜索中止:", clip.reason, clip.message || "");
+    await showSimpleToast(tab, message);
+    return;
+  }
+
+  console.log("[视频好帮手] 剪贴板图片:", clip.mime, clip.size, "字节");
+
+  // 主路径：POST 原图 → 直接打开结果页
+  const uploaded = await uploadToLensAndGetUrl(clip.base64, clip.mime);
+  if (uploaded.ok) {
+    const resultTab = await chrome.tabs.create({ url: uploaded.url, active: true });
+
+    // 结果页打开后把 Lens 的自动选框拉满整图。
+    // 失败也不影响页面本身，标签页始终保持打开。
+    if (resultTab?.id) {
+      const loaded = await waitForTabComplete(resultTab.id);
+      if (loaded) {
+        const expanded = await expandLensSelection(resultTab.id);
+        console.log(
+          "[视频好帮手] 选框拉满:",
+          expanded.ok ? `成功 ${expanded.w}x${expanded.h} (${expanded.tag})` : `失败 ${expanded.reason}`
+        );
+      } else {
+        console.log("[视频好帮手] 结果页加载超时，跳过拉选框");
+      }
+    }
+    return;
+  }
+
+  console.log("[视频好帮手] Lens 上传失败，改走页面注入:", uploaded.reason, uploaded.message || "");
+
+  // 兜底：打开 Lens 页面塞文件
+  const injected = await openLensPageAndInject(clip.base64, clip.mime);
+  if (!injected.ok) {
+    console.log("[视频好帮手] Lens 页面注入也失败:", injected.reason, injected.message || "");
+    // 把两条失败原因直接显示出来，省得去翻 Service Worker 控制台
+    const detail = [
+      `上传：${uploaded.reason}${uploaded.status ? "/" + uploaded.status : ""}`,
+      `注入：${injected.reason}`,
+    ].join("，");
+    await showSimpleToast(tab, `Google 图片搜索失败（${detail}）`);
+  }
+}
+
+
+// 轻量提示条。只注入一个自动消失的浮层，不影响 showTitleDialog。
+async function showSimpleToast(tab, message) {
+  if (!tab?.id) return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      args: [message],
+      func: (text) => {
+        const old = document.getElementById("__og-toast");
+        if (old) old.remove();
+
+        const box = document.createElement("div");
+        box.id = "__og-toast";
+        box.textContent = text;
+        box.style.cssText = [
+          "position:fixed", "top:24px", "left:50%", "transform:translateX(-50%)",
+          "z-index:2147483647", "background:#2f2b26", "color:#f6f4f0",
+          "padding:12px 20px", "border-radius:10px", "font-size:14px",
+          "font-family:system-ui,-apple-system,'Microsoft YaHei',sans-serif",
+          "box-shadow:0 8px 28px rgba(0,0,0,.35)", "max-width:80vw",
+          "line-height:1.5", "pointer-events:none",
+        ].join(";");
+        document.documentElement.appendChild(box);
+        setTimeout(() => box.remove(), 3200);
+      },
+    });
+  } catch (e) {
+    // 无法注入（受限页面等）时退化成系统通知
+    try {
+      chrome.notifications.create({
+        type: "basic",
+        iconUrl: chrome.runtime.getURL("icons/active-48.png"),
+        title: "视频好帮手",
+        message,
+      });
+    } catch {}
+  }
+}
+
 
 // 处理"复制当前视频地址"右键菜单点击
 async function handleCopyVideoUrl(info, tab) {
@@ -882,6 +1356,12 @@ async function handleSendToApp(msg) {
   if (msg.contentType) message.contentType = msg.contentType;
   if (msg.headers) message.headers = msg.headers;
   if (typeof msg.openApp === "boolean") message.openApp = msg.openApp;
+  else {
+    // 右键菜单 / 快捷键路径不带 openApp，这里直接读开关状态，保证行为一致
+    try {
+      message.openApp = await loadOpenAppState();
+    } catch {}
+  }
   message.pageUrl = msg.referer || "";
   message.userAgent = navigator.userAgent;
 

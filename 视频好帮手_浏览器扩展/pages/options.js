@@ -21,6 +21,7 @@ const discoveryMessage = document.getElementById("discovery-message");
 const endpointHint = document.getElementById("endpoint-hint");
 const advancedDetails = document.getElementById("advanced");
 
+// 与 man.py 的 BRIDGE_DEFAULT_PORT 保持一致
 const FALLBACK_ENDPOINT = "http://127.0.0.1:5999";
 
 function resolvedEndpoint() {
@@ -41,11 +42,10 @@ function setDiscovery(state, message) {
   discoveryMessage.textContent = message;
 }
 
-// --- Auto-pairing -----------------------------------------------------------
-// The desktop app opens a single-use ~120s pairing window when the user
-// clicks "Pair extension" in Settings. While this page is visible we poll
-// `GET /v1/pair` every 5 seconds so pairing completes within seconds of that
-// click (the background service worker only retries once per minute).
+// --- 自动配对 ---------------------------------------------------------------
+// 桌面端点「配对」后会开启一个约 120 秒、一次性的配对窗口。
+// 本页可见时每 5 秒轮询一次 `GET /v1/pair`，用户点完按钮几秒内即可完成配对
+// （后台 Service Worker 只有每分钟一次的兜底重试）。
 const AUTOPAIR_POLL_MS = 5000;
 let pairPollTimer = null;
 
@@ -53,8 +53,8 @@ async function onPairedSuccess() {
   const { endpoint, token } = await loadBridgeConfig();
   endpointInput.value = endpoint || "";
   tokenInput.value = token || "";
-  setDiscovery("found", ` ${endpoint}.`);
-  setStatus("Paired automatically — you're all set.", "ok");
+  setDiscovery("found", `已连接到 ${endpoint}`);
+  setStatus("配对成功，可以开始使用了。", "ok");
   stopPairPolling();
 }
 
@@ -100,16 +100,14 @@ async function init() {
   const { endpoint, token } = await loadBridgeConfig();
   const alreadyPaired = Boolean(token);
 
-  // While unpaired, keep trying to grab the token automatically: once
-  // immediately (the user may already have a pairing window open in the
-  // app) and then every few seconds while this page stays visible.
+  // 未配对时持续尝试自动取令牌：先立刻试一次（用户可能已经在桌面端
+  // 开好了配对窗口），之后只要本页保持可见就每隔几秒重试。
   if (!alreadyPaired) {
     void tryAutoPair();
     if (!document.hidden) startPairPolling();
   }
 
-  // Show the welcome heading on first run, the regular settings heading
-  // once the user is already paired (they're here to inspect / change).
+  // 首次使用显示欢迎标题；已配对则显示设置标题（这时用户是来查看或改配置的）。
   if (alreadyPaired) {
     settingsHeader.hidden = false;
   } else {
@@ -119,48 +117,45 @@ async function init() {
   endpointInput.value = endpoint || "";
   tokenInput.value = token || "";
 
-  // Skip auto-discovery if the user is already paired AND we have a stored
-  // endpoint that responds — they're probably here to change the token, no
-  // need to overwrite the URL they trust.
+  // 已配对且保存的端点能连通时跳过自动发现——用户多半只是来换令牌的，
+  // 不该覆盖他自己填的地址。
   if (alreadyPaired) {
     const result = await checkBridgeHealth(endpoint);
     if (result.ok) {
-      const versionSuffix = result.version ? ` (v${result.version})` : "";
-      setDiscovery("found", `Connected to 视频好帮手${versionSuffix} at ${endpoint}.`);
+      const versionSuffix = result.version ? `（协议 v${result.version}）` : "";
+      setDiscovery("found", `已连接到视频批量下载工具${versionSuffix}：${endpoint}`);
       return;
     }
     setDiscovery(
       "missing",
-      `Couldn't reach the saved endpoint ${endpoint}. Probing default ports…`
+      `连接不上已保存的地址 ${endpoint}，正在扫描默认端口…`
     );
   }
 
   const found = await discoverBridgeEndpoint();
   if (found) {
     endpointInput.value = found.endpoint;
-    const versionSuffix = found.version ? ` (v${found.version})` : "";
+    const versionSuffix = found.version ? `（协议 v${found.version}）` : "";
     setDiscovery(
       "found",
-      `Found 视频好帮手${versionSuffix} on ${found.endpoint}. Paste the token from 视频好帮手 → Settings → Network → Browser extension to finish.`
+      `已找到视频批量下载工具${versionSuffix}：${found.endpoint}。请在桌面端点「配对」按钮，或把令牌粘贴到上方输入框。`
     );
-    endpointHint.textContent =
-      "自动-连接-";
+    endpointHint.textContent = `已自动连接到 ${found.endpoint}`;
     return;
   }
 
-  // Discovery failed: open the Advanced disclosure so the user can supply
-  // the endpoint manually.
+  // 自动发现失败：展开「高级」，让用户手动填地址。
   if (advancedDetails) advancedDetails.open = true;
   setDiscovery(
     "missing",
-    "视频好帮手 doesn't seem to be running. Launch the desktop app, then refresh this page — or set the endpoint manually below."
+    "没有检测到视频批量下载工具。请先启动桌面程序，然后刷新本页；也可以在下方手动填写地址。"
   );
 }
 
 revealBtn.addEventListener("click", () => {
   const next = tokenInput.type === "password" ? "text" : "password";
   tokenInput.type = next;
-  revealBtn.textContent = next === "password" ? "Show" : "Hide";
+  revealBtn.textContent = next === "password" ? "显示" : "隐藏";
   revealBtn.setAttribute("aria-pressed", String(next !== "password"));
 });
 
@@ -169,20 +164,20 @@ form.addEventListener("submit", async (event) => {
   const endpoint = resolvedEndpoint();
   const token = tokenInput.value.trim();
   if (!token) {
-    setStatus("Paste the pairing token first.", "error");
+    setStatus("请先粘贴配对令牌。", "error");
     return;
   }
   await saveBridgeConfig({ endpoint, token });
-  setStatus("Saved. The extension will use this token from now on.", "ok");
+  setStatus("已保存，扩展之后会使用这个令牌。", "ok");
 });
 
 if (pairNowBtn) {
   pairNowBtn.addEventListener("click", async () => {
-    setStatus("Trying to pair automatically…");
+    setStatus("正在尝试自动配对…");
     const paired = await tryAutoPair();
     if (paired) return;
     setStatus(
-      "No open pairing window found. In 视频好帮手, go to Settings → Network → Browser extension and click \"Pair extension\", then try again (or just wait — this page keeps retrying).",
+      "没有找到已开启的配对窗口。请在视频批量下载工具主界面点「配对」按钮，然后再试一次（也可以直接等待，本页会持续重试）。",
       "error"
     );
     if (!document.hidden) startPairPolling();
@@ -191,14 +186,14 @@ if (pairNowBtn) {
 
 testBtn.addEventListener("click", async () => {
   const endpoint = resolvedEndpoint();
-  setStatus("Testing connection…");
+  setStatus("正在测试连接…");
   const result = await checkBridgeHealth(endpoint);
   if (result.ok) {
-    const versionSuffix = result.version ? ` (v${result.version})` : "";
-    setStatus(`Connected to 视频好帮手${versionSuffix} at ${endpoint}.`, "ok");
+    const versionSuffix = result.version ? `（协议 v${result.version}）` : "";
+    setStatus(`连接成功${versionSuffix}：${endpoint}`, "ok");
   } else {
     setStatus(
-      `Could not reach 视频好帮手 at ${endpoint}. Make sure the app is running.`,
+      `连接不上 ${endpoint}，请确认视频批量下载工具正在运行。`,
       "error"
     );
   }

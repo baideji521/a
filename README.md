@@ -37,13 +37,13 @@
 - **指纹去重** — 扫描输出目录已有 MP4 建立内存指纹库，重复视频自动跳过（见 [指纹去重](#指纹去重dna)）
 - **TikTok Native Extractor** — 基于 `curl_cffi` 的 Chrome TLS 指纹模拟直连提取，绕过 JS Challenge；失败自动回退 yt-dlp
 - **NVENC 硬件编码** — 启动时探测 `h264_nvenc`，可选 H.264 (NVIDIA NVENC) / H.264 (libx264)
-- **环境自检** — 启动时检查 Python / FFmpeg / NVENC / Node.js / yt-dlp 版本 / Cookie / 扩展配对状态
+- **环境自检** — 启动时检查 Python / FFmpeg / NVENC / JS运行时 / yt-dlp 版本 / Cookie / 扩展配对状态
 - **反爬绕过** — 下载前预请求模拟用户点击、附带完整浏览器请求头、按域名注入 Referer
 - **日志脱敏** — Cookie 值、Token、Session、Authorization 永不落盘（见 [日志与脱敏](#日志与脱敏)）
 
 **扩展（v1.6.9，MV3）**
 
-- **自动配对** — 每分钟轮询 `47720-47729` 端口发现客户端并取回 Token，无需手动输入
+- **自动配对** — 每分钟轮询 `5999-6008` 端口发现客户端并取回 Token，无需手动输入
 - **Cookie 自动同步** — 标签页切换/更新时按平台捕获 Cookie 推送给客户端，2 分钟一次定时刷新
 - **媒体嗅探** — `webRequest` 监听 26 种 MIME + 24 种扩展名 + 平台 CDN 主机，自动过滤埋点/像素请求
 - **HLS 分组** — 同一 m3u8 的分片自动归组展示
@@ -76,14 +76,43 @@ TikTok、YouTube、YouTube-nocookie、Instagram、X、Twitter、Bilibili、Vimeo
 | `curl_cffi` | TikTok Native Extractor（TLS 指纹模拟） | 强烈推荐 |
 | `yt-dlp.exe` | 下载引擎，位于根目录或 `bin/` | 必需 |
 | `ffmpeg.exe` / `ffprobe.exe` | 合并/转码/探测，位于根目录或 `ffmpeg/bin/` | 必需 |
-| `node.exe` | yt-dlp 回退路径的 JS 解签运行时 | TikTok 回退时必需 |
+| `node.exe` / `deno.exe` | yt-dlp 的 JS 解签运行时 | TikTok 回退、YouTube nsig 需要 |
 | Chrome / Edge (Chromium) | 加载 MV3 扩展 | 联动功能必需 |
 
-**JS 运行时探测顺序**：`nodejs/node.exe`（便携版）→ 系统 `PATH` 中的 `node` → `C:\Program Files\nodejs\node.exe` → `C:\Program Files (x86)\nodejs\node.exe`。找到后以 `--js-runtimes "node:<path>"` 传给 yt-dlp。
+**JS 运行时探测顺序**：`nodejs/node.exe`（便携版 node）→ `jsruntime/deno.exe`（程序内置安装的便携版 Deno）→ 系统 `PATH` 中的 `node` / `deno` / `bun` → `C:\Program Files\nodejs\node.exe` → `C:\Program Files (x86)\nodejs\node.exe`。找到后以 `--js-runtimes "<runtime>:<path>"` 传给 yt-dlp。
+
+都没检测到时，启动后界面顶部会弹出提示条，点「安装便携版」即从 GitHub 下载 Deno 单文件版（约 40MB）解压到 `jsruntime/deno.exe`，不写注册表、不改 PATH；点「✕」则记入 `config.json` 的 `js_runtime_install_skipped`，之后不再提示。
+
+**yt-dlp 版本检查**：每天第一次启动时后台查一次 GitHub 最新版本（当天重复启动只查一次，结果缓存在 `_download_temp/.ytdlp_update_state.json`）。发现新版本不会静默替换，而是等空闲（无下载任务）时弹提示条，点「立即更新」才执行 `yt-dlp -U`（失败回退下载 exe 替换，失败保留旧版）；点「✕」忽略该版本，记入 `config.json` 的 `ytdlp_update_skipped_version`。彻底关闭检查：在运行目录建一个空的 `ytdlp_noupdate.txt` 后重启。
+
 
 **可执行文件查找顺序**（`resolve_path()`，man.py:70）：根目录优先，其次 `bin/` 或 `ffmpeg/bin/`。
 
 代理由系统 / v2rayN / TUN 负责，程序不绑定任何代理端口（环境自检显示 `Proxy = SYSTEM`）。
+
+## YouTube 下载策略
+
+对齐 [OmniGet](https://github.com/tonhowtf/omniget) 的 `core/ytdlp.rs`：不猜错误原因，按 yt-dlp 的真实报错换参数重试。
+
+**基线参数**（`build_ytdlp_args()`）
+
+- `-f bv*+ba[ext=m4a]/bv*+ba/b` —— 优先 m4a 音轨，合并进 mp4 时音频可直接复制，省掉 opus → aac 转码
+- `--extractor-args youtube:player_client=default`
+- `-N 8` —— DASH 分片并发；本次运行遇过 1 次 429 降到 4，≥2 次降到 2（`youtube_concurrent_fragments()`）
+- `--throttled-rate 100K` —— 低于此速度判定被限速并重新提取链接，不是限速上限
+- `--buffer-size 16M`，且**不传** `--http-chunk-size`（YouTube 加了反而更容易触发风控）
+
+**错误级联重试**（`_plan_youtube_retry()`）
+
+- `HTTP Error 429` → 退避 10s / 20s / 40s，`player_client` 依次换 `mweb` → `ios`，同时收敛 `-N`
+- `nsig` 解密失败 → `ios` → `mweb`
+- 只剩 SABR 格式 → `android` → `ios` → `tv` → `web_safari`
+- `403 Forbidden` → 追加 `--force-ipv4`（只加一次）
+- `Errno 22 / Invalid argument` → 追加 `--restrict-filenames`
+- `Requested format is not available` / 后处理失败 → 去掉 `-f`、`--merge-output-format` 与 `player_client`，退回 yt-dlp 默认（只简化一次，再失败说明不是格式问题）
+
+**PO Token**：yt-dlp 报 `a po token is required` / `sign in to confirm you're not a bot` 时如实提示，不做无意义的换 client 重试。OmniGet 同样没有内置 provider——它跑在 Docker 或独立 Node 服务里，还需要往 yt-dlp 里装 Python 插件。稳定解法是提供登录 Cookie，或自建 `bgutil-ytdlp-pot-provider`。
+
 
 ## 快速开始
 
@@ -100,6 +129,7 @@ pip install PyQt5 curl_cffi
 ├── bin/yt-dlp.exe
 ├── ffmpeg/bin/{ffmpeg.exe, ffprobe.exe}
 └── nodejs/node.exe        # 可选，TikTok 回退路径需要
+                           # （或让程序在提示条里一键安装 jsruntime/deno.exe）
 ```
 
 ### 3. 启动客户端
@@ -108,7 +138,7 @@ pip install PyQt5 curl_cffi
 python man.py
 ```
 
-无命令行参数。首次运行自动创建 `cookies/`、`downloads/`、`_download_temp/`、`logs/`，并在 `47720-47729` 范围内绑定第一个可用端口启动桥接服务。
+无命令行参数。首次运行自动创建 `cookies/`、`downloads/`、`_download_temp/`、`logs/`，并启动桥接服务，默认监听 `5999`；该端口被占用时在 `5999-6008` 内取第一个可用。
 
 ### 4. 安装浏览器扩展
 
@@ -118,7 +148,7 @@ python man.py
 
 ### 5. 配对
 
-扩展每分钟自动扫描一次 `47720-47729` 端口的 `/v1/pair`。若需立即配对，在客户端点击「配对」按钮打开配对窗口，扩展下一次轮询即可取回 Token。也可用「复制 Token」按钮手动粘贴到扩展选项页。
+扩展每分钟自动扫描一次 `5999-6008` 端口的 `/v1/pair`。若需立即配对，在客户端点击「配对」按钮打开配对窗口，扩展下一次轮询即可取回 Token。也可用「复制 Token」按钮手动粘贴到扩展选项页。
 
 配对成功后：
 
@@ -131,20 +161,20 @@ python man.py
 ```
 下载/
 ├── man.py                       # 主程序（7343 行，唯一入口）
-├── yuanshiman.py                # 旧版备份（4858 行，不参与运行）
 ├── icon.png                     # 应用图标
 ├── README.md
 ├── 打包部署说明.md
 ├── .gitignore                   # 白名单模式，排除所有 cookie / UA 文件
 │
 ├── config.json                  # 运行时配置（自动生成，含 bridge token）
-├── config.ini                   # 旧版 QSettings 残留，现行代码不读取
 ├── link.txt                     # 链接文件
 ├── browser_ua.txt               # 扩展同步的 User-Agent（gitignore）
 │
 ├── bin/yt-dlp.exe
 ├── ffmpeg/bin/{ffmpeg,ffplay,ffprobe}.exe
+├── jsruntime/deno.exe           # 便携版 JS 运行时（提示条一键安装，可选）
 │
+
 ├── cookies/                     # 按域名分类的 Netscape cookie（gitignore）
 │   ├── _meta.json               # 域名注册表
 │   ├── _all_cookies.txt         # 合并总表
@@ -219,7 +249,7 @@ Cookie 自动捕获防抖：`1500 ms` 防抖 + 同平台 `60 s` 最小间隔。
 
 ## 桥接协议
 
-服务端 `OmniGetBridge`，绑定 `127.0.0.1`，端口在 `47720-47729` 中取第一个可用。协议版本 `1`。
+服务端 `OmniGetBridge`，绑定 `127.0.0.1`，默认端口 `5999`；被占用时在 `5999-6008` 中取第一个可用。协议版本 `1`。
 
 除 `/v1/health` 与 `/v1/pair` 外，所有接口要求 `Authorization: Bearer <token>`；缺失返回 `401`，不匹配返回 `403`。
 
@@ -357,9 +387,9 @@ TikTok 走双路径，Native 优先：
 注意事项：
 
 - `bridge_token` 为 `secrets.token_urlsafe(24)` 随机生成，**属于敏感凭据**，`.gitignore` 已排除 `config.json`
-- `DEFAULT_CONFIG` 中的 `bridge_port: 5999` 是过时默认值，实际绑定始终走 `BRIDGE_PORT_RANGE = range(47720, 47730)`
-- 历史版本曾同时写入大小写重复键 `bridge_*` 与 `Bridge_*`，属冗余，可安全删除大写形式后重启
-- `config.ini`（`[window] geometry` / `[video] size_index` / `[output] dir`）是旧 QSettings 残留，现行代码不读取
+- 桥接端口默认 `5999`（`BRIDGE_DEFAULT_PORT`）。`config.json` 的 `bridge_port` 只作为起始端口的覆盖值，实际绑定仍在 `BRIDGE_PORT_RANGE = range(5999, 6009)` 内取第一个可用；扩展侧 `bridge-client.js` 的 `DEFAULT_PORT_RANGE` 必须与之一致
+- 历史版本曾同时写入大小写重复键 `bridge_*` 与 `Bridge_*`，以及不再读取的 `keyword`，均已清理
+
 - 默认 UA：`Chrome/151.0.0.0`（`DEFAULT_UA`，man.py:471），扩展同步后以 `browser_ua.txt` 为准
 
 ## 日志与脱敏
@@ -403,7 +433,7 @@ pyinstaller --onefile --windowed --icon=icon.png --name="视频好帮手" man.py
 | 环境自检 `Cookie: MISSING` | 扩展未配对或未同步 | 打开视频网站等待自动捕获，或在 popup 点「保存网站 Cookie」 |
 | 环境自检 `Extension: 等待扩展同步` | 尚未收到任何 Cookie / UA | 检查扩展是否已配对（popup 状态） |
 | `yt-dlp: MISSING` | 可执行文件缺失 | 放置到根目录或 `bin/` |
-| 扩展始终配对失败 | 客户端未启动，或 47720-47729 被占用 | 启动客户端；检查端口占用与防火墙 |
+| 扩展始终配对失败 | 客户端未启动，或 5999-6008 被占用 | 启动客户端；检查端口占用与防火墙 |
 | 重复下载已有视频 | 指纹库未扫描，或文件名不含平台标识 | 点「扫描」重建；检查日志中「无法识别指纹」列表 |
 | 遇到 TikTok 验证码 | 触发风控 | 在浏览器完成验证，重新同步 Cookie 后重试 |
 | 下载速度异常 | 代理未生效 | 程序不绑定代理端口，由系统 / v2rayN / TUN 层负责 |
@@ -416,5 +446,5 @@ pyinstaller --onefile --windowed --icon=icon.png --name="视频好帮手" man.py
 - **视频处理** — FFmpeg / FFprobe，可选 NVIDIA NVENC 硬件编码
 - **JS 解签** — Node.js（yt-dlp `--js-runtimes`）
 - **浏览器扩展** — Chrome Manifest V3，原生 ESM，无构建步骤
-- **通信** — 本地 HTTP Bridge（`127.0.0.1:47720-47729`，Bearer Token）
+- **通信** — 本地 HTTP Bridge（`127.0.0.1:5999`，占用时顺延至 6008，Bearer Token）
 - **Cookie 格式** — Netscape Cookie File

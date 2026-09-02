@@ -12,6 +12,14 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse
 
+try:
+    # Python 3.12+ 提供 typing.override
+    from typing import override
+except ImportError:
+    # 旧版本 Python 下退化为无操作装饰器
+    def override(func):
+        return func
+
 from PyQt5.QtGui import QIcon
 
 from PyQt5.QtCore import (
@@ -20,6 +28,7 @@ from PyQt5.QtCore import (
     pyqtSignal,
     QTimer,
     QPoint,
+    QRect,
     QEvent
 )
 
@@ -54,7 +63,8 @@ from PyQt5.QtWidgets import (
     QFrame,
     QSizePolicy,
     QSpacerItem,
-    QCheckBox
+    QCheckBox,
+    QDialog
 )
 
 
@@ -77,10 +87,23 @@ def resolve_path(*candidates):
 
 
 # 优先使用根目录已有文件（与 下载.bat 一致），其次 bin / ffmpeg\bin
-YTDLP_EXE = resolve_path(
+# 候选列表单独定义：自动安装完成后调用 refresh_tool_paths() 重新解析即可生效
+YTDLP_CANDIDATES = (
     RUN_DIR / "yt-dlp.exe",
     BIN_DIR / "yt-dlp.exe"
 )
+FFMPEG_CANDIDATES = (
+    RUN_DIR / "ffmpeg.exe",
+    RUN_DIR / "ffmpeg" / "bin" / "ffmpeg.exe",
+    BIN_DIR / "ffmpeg.exe"
+)
+FFPROBE_CANDIDATES = (
+    RUN_DIR / "ffprobe.exe",
+    RUN_DIR / "ffmpeg" / "bin" / "ffprobe.exe",
+    BIN_DIR / "ffprobe.exe"
+)
+
+YTDLP_EXE = resolve_path(*YTDLP_CANDIDATES)
 
 COOKIE_FILE = resolve_path(
     RUN_DIR / "cookies.txt",
@@ -91,18 +114,82 @@ UA_FILE = resolve_path(
     BIN_DIR / "browser_ua.txt"
 )
 
-FFMPEG_EXE = resolve_path(
-    RUN_DIR / "ffmpeg.exe",
-    RUN_DIR / "ffmpeg" / "bin" / "ffmpeg.exe",
-    BIN_DIR / "ffmpeg.exe"
-)
-FFPROBE_EXE = resolve_path(
-    RUN_DIR / "ffprobe.exe",
-    RUN_DIR / "ffmpeg" / "bin" / "ffprobe.exe",
-    BIN_DIR / "ffprobe.exe"
-)
+FFMPEG_EXE = resolve_path(*FFMPEG_CANDIDATES)
+FFPROBE_EXE = resolve_path(*FFPROBE_CANDIDATES)
+
+
+def refresh_tool_paths():
+    """自动安装后重新解析三个 exe 路径（模块内其它代码都在调用时读全局变量）"""
+    global YTDLP_EXE, FFMPEG_EXE, FFPROBE_EXE
+    YTDLP_EXE = resolve_path(*YTDLP_CANDIDATES)
+    FFMPEG_EXE = resolve_path(*FFMPEG_CANDIDATES)
+    FFPROBE_EXE = resolve_path(*FFPROBE_CANDIDATES)
 
 LINK_FILE = RUN_DIR / "link.txt"
+
+# 便携版 JS 运行时（用于 yt-dlp nsig 解密）
+# node 便携版按历史约定放 nodejs\node.exe；
+# 程序内置安装的是 Deno 单文件版，放 jsruntime\deno.exe。
+PORTABLE_NODE_EXE = RUN_DIR / "nodejs" / "node.exe"
+JS_RUNTIME_DIR = RUN_DIR / "jsruntime"
+PORTABLE_DENO_EXE = JS_RUNTIME_DIR / "deno.exe"
+DENO_ZIP_URL = (
+    "https://github.com/denoland/deno/releases/latest/download/"
+    "deno-x86_64-pc-windows-msvc.zip"
+)
+
+# 捆绑 FFmpeg 的安装位置与下载源（gyan.dev 官方 Windows 构建，essentials 版够用）
+FFMPEG_BIN_DIR = RUN_DIR / "ffmpeg" / "bin"
+FFMPEG_ZIP_URL = (
+    "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+)
+
+# ---- YouTube 下载策略（对齐 OmniGet 的 core/ytdlp.rs）----
+# -N：并发分片数。YouTube 的 DASH 是分片流，单连接跑不满带宽。
+#     OmniGet 的做法是「基线并发 + 被 429 后自动收敛」，见
+#     youtube_concurrent_fragments()：0 次 429 用基线，1 次降 4，≥2 次降 2。
+YOUTUBE_CONCURRENT_FRAGMENTS = 8
+YOUTUBE_FRAGMENTS_AFTER_ONE_429 = 4
+YOUTUBE_FRAGMENTS_AFTER_MANY_429 = 2
+
+# --throttled-rate：低于该速度就判定被限速并重新提取链接（不是限速上限）。
+#     取 100K 与 OmniGet 一致：足够低，不会在正常慢速时频繁重新提取。
+YOUTUBE_THROTTLED_RATE = "100K"
+
+# 格式选择器：优先 m4a 音轨，合并进 mp4 时可直接复制音频流，
+# 省掉 opus → aac 的转码；拿不到 m4a 再退回任意音轨。
+YOUTUBE_FORMAT_SELECTOR = "bv*+ba[ext=m4a]/bv*+ba/b"
+
+# SABR 回退顺序：web 提取器有时只给 SABR 格式，普通下载器拉不动。
+#     这四个 client 仍然返回渐进式 URL，按可靠性从高到低排。
+YOUTUBE_SABR_CLIENT_CASCADE = ("android", "ios", "tv", "web_safari")
+
+# yt-dlp 在缺少 / 过期 PO Token 时实际输出的句子。
+#     不用裸 "po_token" 匹配：成功拿到 token 的日志里也有这个词。
+YOUTUBE_POT_MISSING_SIGNS = (
+    "a po token is required",
+    "po token is missing",
+    "missing a po token",
+    "content is not available on this app",
+    "sign in to confirm you're not a bot",
+)
+
+# 进程内 429 计数：只用来收敛并发，重启后归零
+_youtube_429_hits = 0
+
+
+def youtube_concurrent_fragments():
+    """按本次运行遇到过的 429 次数决定 -N（OmniGet 同款收敛策略）"""
+    if _youtube_429_hits >= 2:
+        return YOUTUBE_FRAGMENTS_AFTER_MANY_429
+    if _youtube_429_hits > 0:
+        return YOUTUBE_FRAGMENTS_AFTER_ONE_429
+    return YOUTUBE_CONCURRENT_FRAGMENTS
+
+
+def youtube_pot_missing(text_lower):
+    """stderr 是否在说「缺 PO Token」"""
+    return any(sign in text_lower for sign in YOUTUBE_POT_MISSING_SIGNS)
 
 TEMP_DIR = RUN_DIR / "_download_temp"
 
@@ -374,22 +461,132 @@ def get_ytdlp_version():
 
 
 # ============================================================
-# yt-dlp 轻量版本检查（后台线程，不阻塞 GUI，失败不影响启动）
+# JS 运行时（yt-dlp nsig 解密需要）
 #
-# 默认关闭：不联网查 GitHub、不自更新。
-# 需要时在运行目录建一个空的 ytdlp_update.txt 再重启即可开启。
-#
-# 开启后的策略：启动后异步检查一次；距上次检查不足 24 小时则跳过；
-#       发现新版本时优先用 yt-dlp 自带 -U 自更新，失败则从 GitHub 下载；
-#       任何失败都保留现有版本继续使用。
+# 独立打包的 yt-dlp 不会自己从 PATH 找运行时，必须显式传绝对路径。
+# 检测优先级：便携 node > 便携 deno > PATH > 常见安装目录。
+# 都没有时可调用 install_portable_js_runtime() 下载 Deno 单文件版。
 # ============================================================
 
-YTDLP_UPDATE_INTERVAL = 24 * 3600
-YTDLP_LAST_CHECK_FILE = RUN_DIR / "_download_temp" / ".ytdlp_last_update_check"
-YTDLP_UPDATE_FLAG_FILE = RUN_DIR / "ytdlp_update.txt"
+
+def js_runtime_lookup():
+    """检测可用的 JS 运行时，返回 (runtime, 绝对路径)；没有则返回 (None, "")"""
+    import shutil
+    if sys.platform == "win32":
+        if PORTABLE_NODE_EXE.exists():
+            return "node", str(PORTABLE_NODE_EXE)
+        if PORTABLE_DENO_EXE.exists():
+            return "deno", str(PORTABLE_DENO_EXE)
+    for runtime, binary in (("node", "node"), ("deno", "deno"), ("bun", "bun")):
+        path = shutil.which(binary)
+        if path and os.path.exists(path):
+            return runtime, str(Path(path).resolve())
+    if sys.platform == "win32":
+        for path in (r"C:\Program Files\nodejs\node.exe",
+                     r"C:\Program Files (x86)\nodejs\node.exe"):
+            if os.path.exists(path):
+                return "node", path
+    return None, ""
+
+
+def install_portable_js_runtime(log=None):
+    """下载 Deno 单文件版到 jsruntime\\deno.exe，返回 (ok, message)
+
+    Deno 的 Windows 发布包是只含一个 exe 的 zip（约 40MB），
+    解压出来即用，不需要安装器、不写注册表、不改 PATH。
+    """
+    import shutil
+    import zipfile
+    import urllib.request
+
+    def _log(msg):
+        if log:
+            try:
+                log(msg)
+            except Exception:
+                pass
+
+    tmp_zip = None
+    try:
+        JS_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        tmp_zip = JS_RUNTIME_DIR / "deno_download.zip"
+
+        _log("[JS Runtime] 开始下载 Deno 便携版（约 40MB，走系统代理）…")
+        req = urllib.request.Request(
+            DENO_ZIP_URL,
+            headers={"User-Agent": "man.py-js-runtime"}
+        )
+        with urllib.request.urlopen(req, timeout=180) as resp, open(tmp_zip, "wb") as f:
+            while True:
+                chunk = resp.read(256 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+
+        size_mb = tmp_zip.stat().st_size / 1024 / 1024
+        if size_mb < 5:
+            return False, f"下载内容异常（仅 {size_mb:.1f}MB），已放弃安装"
+
+        _log(f"[JS Runtime] 下载完成（{size_mb:.1f}MB），正在解压…")
+
+        new_exe = JS_RUNTIME_DIR / "deno.exe.new"
+        with zipfile.ZipFile(tmp_zip) as zf:
+            member = next(
+                (n for n in zf.namelist() if n.lower().endswith("deno.exe")),
+                None
+            )
+            if not member:
+                return False, "压缩包内未找到 deno.exe"
+            with zf.open(member) as src, open(new_exe, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+        # 解压成功后才替换旧文件，中途失败不破坏已有运行时
+        os.replace(str(new_exe), str(PORTABLE_DENO_EXE))
+
+        version = "unknown"
+        try:
+            r = subprocess.run(
+                [str(PORTABLE_DENO_EXE), "--version"],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="ignore", timeout=30
+            )
+            out = (r.stdout or "").strip()
+            if out:
+                version = out.splitlines()[0]
+        except Exception:
+            pass
+
+        return True, f"已安装便携版 JS 运行时：{PORTABLE_DENO_EXE}（{version}）"
+
+    except Exception as e:
+        return False, f"安装失败：{e}"
+
+    finally:
+        if tmp_zip is not None:
+            try:
+                tmp_zip.unlink()
+            except Exception:
+                pass
+
+
+# ============================================================
+# yt-dlp 版本检查（每天第一次启动查一次，后台线程，不阻塞任何流程）
+#
+# 只检查、不静默替换：发现新版本时交给 GUI 在空闲时弹提示条，
+# 用户点「立即更新」才真正执行 ytdlp_perform_update()。
+#
+# 关闭方式：在运行目录建一个空的 ytdlp_noupdate.txt 后重启。
+# ============================================================
+
+YTDLP_UPDATE_STATE_FILE = TEMP_DIR / ".ytdlp_update_state.json"
+YTDLP_UPDATE_DISABLE_FILE = RUN_DIR / "ytdlp_noupdate.txt"
+
+YTDLP_EXE_URL = (
+    "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+)
 
 try:
-    YTDLP_UPDATE_CHECK = YTDLP_UPDATE_FLAG_FILE.exists()
+    YTDLP_UPDATE_CHECK = not YTDLP_UPDATE_DISABLE_FILE.exists()
 except Exception:
     YTDLP_UPDATE_CHECK = False
 
@@ -410,13 +607,79 @@ def _ytdlp_latest_release_version():
         return None
 
 
-def _ytdlp_try_self_update():
-    """优先用 yt-dlp 自带 -U 自更新，失败回退到 GitHub 下载替换"""
+def _load_ytdlp_update_state():
+    """读取上次检查结果 {"date": "YYYY-MM-DD", "latest": "..."}"""
+    try:
+        if YTDLP_UPDATE_STATE_FILE.exists():
+            data = json.loads(
+                YTDLP_UPDATE_STATE_FILE.read_text(encoding="utf-8")
+            )
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def _save_ytdlp_update_state(date_str, latest):
+    try:
+        YTDLP_UPDATE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        YTDLP_UPDATE_STATE_FILE.write_text(
+            json.dumps({"date": date_str, "latest": latest}, ensure_ascii=False),
+            encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
+def _version_is_newer(latest, local):
+    """yt-dlp 版本号形如 2026.08.20，能解析成数字就按数字比，否则退化为不等判断"""
+    if not latest or not local or local == "unknown":
+        return False
+    if latest == local:
+        return False
+    try:
+        a = tuple(int(x) for x in latest.split("."))
+        b = tuple(int(x) for x in local.split("."))
+        return a > b
+    except Exception:
+        return True
+
+
+def ytdlp_check_update_today(force=False):
+    """每天第一次联网查一次最新版本
+
+    返回 (local, latest, need_update, reason)
+    reason: disabled / cached / checked / offline
+    """
+    local = get_ytdlp_version()
+
+    if not YTDLP_UPDATE_CHECK and not force:
+        return local, "", False, "disabled"
+
+    today = time.strftime("%Y-%m-%d")
+    state = _load_ytdlp_update_state()
+
+    # 当天已经查过：直接用缓存结果，不再联网（同一天多次开关程序只查一次）
+    if not force and state.get("date") == today:
+        latest = str(state.get("latest") or "")
+        return local, latest, _version_is_newer(latest, local), "cached"
+
+    latest = _ytdlp_latest_release_version()
+    if not latest:
+        return local, "", False, "offline"
+
+    _save_ytdlp_update_state(today, latest)
+    return local, latest, _version_is_newer(latest, local), "checked"
+
+
+def ytdlp_perform_update():
+    """执行更新：优先 yt-dlp 自带 -U，失败回退 GitHub 下载替换"""
     try:
         r = subprocess.run(
             [str(YTDLP_EXE), "-U"],
             capture_output=True, text=True,
-            encoding="utf-8", errors="ignore", timeout=120
+            encoding="utf-8", errors="ignore", timeout=300
         )
         out = ((r.stdout or "") + (r.stderr or "")).lower()
         if r.returncode == 0 and ("updated yt-dlp" in out or "latest version" in out):
@@ -428,10 +691,10 @@ def _ytdlp_try_self_update():
         import urllib.request
         tmp = Path(str(YTDLP_EXE) + ".new")
         req = urllib.request.Request(
-            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
+            YTDLP_EXE_URL,
             headers={"User-Agent": "man.py-update-check"}
         )
-        with urllib.request.urlopen(req, timeout=120) as resp, open(tmp, "wb") as f:
+        with urllib.request.urlopen(req, timeout=300) as resp, open(tmp, "wb") as f:
             f.write(resp.read())
         if tmp.stat().st_size > 1024 * 1024:
             backup = Path(str(YTDLP_EXE) + ".bak")
@@ -457,46 +720,183 @@ def _ytdlp_try_self_update():
     return False
 
 
-def check_ytdlp_update_async():
-    """后台检查/更新 yt-dlp（非阻塞）；结果写入日志，任何异常不影响程序运行
+def reset_ytdlp_version_cache():
+    """更新完 exe 后清掉版本缓存，下次读取重新探测"""
+    global _YTDLP_VERSION_CACHE
+    _YTDLP_VERSION_CACHE = None
 
-    默认不启用：见 YTDLP_UPDATE_CHECK。
+
+def ytdlp_install_missing(log=None):
+    """yt-dlp.exe 缺失时下载最新版到 YTDLP_EXE，返回 (ok, 版本号或错误信息)
+
+    只在文件不存在时调用（YTDLP_EXE 此时就是 运行目录\\yt-dlp.exe）。
+    先写 .new 临时文件，体积校验通过才改名，中途失败不会留下半个 exe。
     """
-    if not YTDLP_UPDATE_CHECK:
-        task_debug("[yt-dlp] update_check=disabled(未建 ytdlp_update.txt)")
-        return
+    import urllib.request
 
+    def _log(msg):
+        if log:
+            try:
+                log(msg)
+            except Exception:
+                pass
+
+    tmp = Path(str(YTDLP_EXE) + ".new")
+    try:
+        YTDLP_EXE.parent.mkdir(parents=True, exist_ok=True)
+
+        _log("[YT-DLP] 未检测到 yt-dlp.exe，开始下载最新版（约 18MB，走系统代理）…")
+        req = urllib.request.Request(
+            YTDLP_EXE_URL,
+            headers={"User-Agent": "man.py-update-check"}
+        )
+        with urllib.request.urlopen(req, timeout=300) as resp, open(tmp, "wb") as f:
+            while True:
+                chunk = resp.read(256 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+
+        size_mb = tmp.stat().st_size / 1024 / 1024
+        if size_mb < 5:
+            return False, f"下载内容异常（仅 {size_mb:.1f}MB）"
+
+        os.replace(str(tmp), str(YTDLP_EXE))
+        refresh_tool_paths()
+        reset_ytdlp_version_cache()
+
+        version = get_ytdlp_version()
+        _log(f"[YT-DLP] 下载完成（{size_mb:.1f}MB），版本 {version}")
+        return True, version
+
+    except Exception as e:
+        return False, f"{e}"
+
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except Exception:
+            pass
+
+
+def ffmpeg_version_text():
+    """读取 ffmpeg 版本首行里的版本号，缺失或异常返回 unknown"""
+    if not check_file(FFMPEG_EXE):
+        return "unknown"
+    try:
+        r = subprocess.run(
+            [str(FFMPEG_EXE), "-hide_banner", "-version"],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="ignore", timeout=30
+        )
+        first = (r.stdout or "").strip().splitlines()
+        if first:
+            m = re.search(r"ffmpeg version (\S+)", first[0])
+            return m.group(1) if m else first[0]
+    except Exception:
+        pass
+    return "unknown"
+
+
+def install_ffmpeg_bundle(log=None):
+    """下载 gyan.dev 的 Windows FFmpeg 构建，解出 ffmpeg/ffprobe 到 ffmpeg\\bin
+
+    返回 (ok, message)。压缩包约 105MB，解压后只保留 ffmpeg.exe / ffprobe.exe，
+    两个 exe 都成功替换才算安装成功；中途失败不动已有文件。
+    """
+    import zipfile
+    import urllib.request
+    import shutil
+
+    def _log(msg):
+        if log:
+            try:
+                log(msg)
+            except Exception:
+                pass
+
+    tmp_zip = None
+    try:
+        TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        FFMPEG_BIN_DIR.mkdir(parents=True, exist_ok=True)
+        tmp_zip = TEMP_DIR / "ffmpeg_download.zip"
+
+        _log("[FFmpeg] 开始下载 Windows 构建（约 105MB，走系统代理）…")
+        req = urllib.request.Request(
+            FFMPEG_ZIP_URL,
+            headers={"User-Agent": "man.py-ffmpeg-install"}
+        )
+        downloaded = 0
+        next_mark = 20 * 1024 * 1024
+        with urllib.request.urlopen(req, timeout=600) as resp, open(tmp_zip, "wb") as f:
+            while True:
+                chunk = resp.read(256 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                if downloaded >= next_mark:
+                    _log(f"[FFmpeg] 已下载 {downloaded / 1024 / 1024:.0f}MB…")
+                    next_mark += 20 * 1024 * 1024
+
+        size_mb = tmp_zip.stat().st_size / 1024 / 1024
+        if size_mb < 20:
+            return False, f"下载内容异常（仅 {size_mb:.1f}MB），已放弃安装"
+
+        _log(f"[FFmpeg] 下载完成（{size_mb:.1f}MB），正在解压…")
+
+        wanted = ("ffmpeg.exe", "ffprobe.exe")
+        with zipfile.ZipFile(tmp_zip) as zf:
+            names = zf.namelist()
+            for exe in wanted:
+                member = next(
+                    (n for n in names
+                     if n.lower().replace("\\", "/").endswith(f"bin/{exe}")),
+                    None
+                )
+                if not member:
+                    return False, f"压缩包内未找到 {exe}"
+
+                target = FFMPEG_BIN_DIR / exe
+                new_file = FFMPEG_BIN_DIR / (exe + ".new")
+                with zf.open(member) as src, open(new_file, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                # 解压成功后才替换旧文件，中途失败不破坏已有 FFmpeg
+                os.replace(str(new_file), str(target))
+
+        refresh_tool_paths()
+
+        version = ffmpeg_version_text()
+        _log(f"[FFmpeg] 安装完成：{FFMPEG_BIN_DIR}（{version}）")
+        return True, f"已安装 FFmpeg / FFprobe 到 {FFMPEG_BIN_DIR}（{version}）"
+
+    except Exception as e:
+        return False, f"安装失败：{e}"
+
+    finally:
+        if tmp_zip is not None:
+            try:
+                tmp_zip.unlink()
+            except Exception:
+                pass
+
+
+def check_ytdlp_update_async(callback=None, force=False):
+    """后台线程做每日版本检查（非阻塞，不影响其它进程）
+
+    callback(local, latest, need_update, reason) 在工作线程里调用，
+    GUI 侧需要用信号转回主线程再动界面。
+    """
     def _worker():
         try:
-            local = get_ytdlp_version()
-            # 24 小时内已检查过 → 跳过（不每次下载都检查）
-            try:
-                if YTDLP_LAST_CHECK_FILE.exists():
-                    age = time.time() - YTDLP_LAST_CHECK_FILE.stat().st_mtime
-                    if age < YTDLP_UPDATE_INTERVAL:
-                        task_debug(f"[yt-dlp] version={local} source=local "
-                                   f"update_check=skipped({int(age / 3600)}h ago)")
-                        return
-            except Exception:
-                pass
-            latest = _ytdlp_latest_release_version()
-            if not latest:
-                task_debug(f"[yt-dlp] version={local} source=local update_check=failed(网络不可用)")
-            elif latest == local:
-                task_debug(f"[yt-dlp] version={local} source=local update_check=latest")
-            else:
-                ok = _ytdlp_try_self_update()
-                new_ver = get_ytdlp_version()
-                if ok and new_ver not in ("unknown", local):
-                    task_debug(f"[yt-dlp] updated=true version={new_ver} (原 {local})")
-                else:
-                    task_debug(f"[yt-dlp] version={local} source=local "
-                               f"update_check=update_failed(latest={latest}，继续使用当前版本)")
-            try:
-                YTDLP_LAST_CHECK_FILE.parent.mkdir(parents=True, exist_ok=True)
-                YTDLP_LAST_CHECK_FILE.write_text(str(time.time()), encoding="utf-8")
-            except Exception:
-                pass
+            local, latest, need_update, reason = ytdlp_check_update_today(force)
+            task_debug(
+                f"[yt-dlp] version={local} latest={latest or 'NA'} "
+                f"update_check={reason} need_update={need_update}"
+            )
+            if callback:
+                callback(local, latest, need_update, reason)
         except Exception:
             pass
 
@@ -529,48 +929,202 @@ def get_system_proxy_state():
     return "default"
 
 
-def check_environment():
-    """启动环境检查，返回 [(项目, 状态), ...]
+# ============================================================
+# 组件自检与归类
+#
+# required    必需：缺任意一项都无法完成下载，启动自检时自动下载补齐
+# recommended 推荐：缺了还能跑，但会掉能力（解密不稳 / 没硬编码），提示条一键安装
+# data        数据与配置：由浏览器扩展同步或系统提供，程序不下载
+#
+# installer 字段决定「能不能自动装」：ytdlp / ffmpeg / jsruntime / None
+# ============================================================
 
-    代理由系统 / v2rayN / TUN 负责，程序不绑定任何代理端口：Proxy = SYSTEM。
-    """
-    import shutil
+COMPONENT_GROUPS = ("required", "recommended", "data")
 
-    rows = []
-    rows.append(("Python", f"OK ({sys.version.split()[0]})"))
-    rows.append(("FFmpeg", "OK" if check_file(FFMPEG_EXE) else "MISSING"))
+COMPONENT_GROUP_TITLES = {
+    "required": "必需组件",
+    "recommended": "推荐组件",
+    "data": "数据与配置",
+}
 
-    nvenc = "UNKNOWN"
-    if check_file(FFMPEG_EXE):
-        try:
-            r = subprocess.run(
-                [str(FFMPEG_EXE), "-hide_banner", "-encoders"],
-                capture_output=True, text=True,
-                encoding="utf-8", errors="ignore", timeout=15
-            )
-            nvenc = "OK" if "h264_nvenc" in (r.stdout or "") else "NO"
-        except Exception:
-            nvenc = "UNKNOWN"
-    rows.append(("NVENC", nvenc))
 
-    node_path = shutil.which("node")
-    if not node_path and (RUN_DIR / "nodejs" / "node.exe").exists():
-        node_path = str(RUN_DIR / "nodejs" / "node.exe")
-    rows.append(("Node.js", "OK" if node_path else "MISSING"))
-
-    rows.append(("yt-dlp", "OK" if check_file(YTDLP_EXE) else "MISSING"))
-    rows.append(("yt-dlp版本", get_ytdlp_version()))
-
-    cookie_ok = (
+def cookie_state():
+    """Cookie 是否可用（统一文件 / 按域名分类 / 旧版 cookies.txt 任一即可）"""
+    return (
         (COOKIES_DIR / "_all_cookies.txt").exists()
         or any((COOKIES_DIR / d / "_default.txt").exists()
                for d in ("tiktok.com", "youtube.com", "instagram.com"))
         or COOKIE_FILE.exists()
     )
-    rows.append(("Cookie", "OK" if cookie_ok else "MISSING"))
-    rows.append(("Extension", "OK" if (UA_FILE.exists() or cookie_ok) else "等待扩展同步"))
-    rows.append(("Proxy", "SYSTEM"))
+
+
+def nvenc_state():
+    """探测 ffmpeg 是否带 NVENC 硬编码器；ffmpeg 缺失或探测失败返回 UNKNOWN"""
+    if not check_file(FFMPEG_EXE):
+        return "UNKNOWN"
+    try:
+        r = subprocess.run(
+            [str(FFMPEG_EXE), "-hide_banner", "-encoders"],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="ignore", timeout=15
+        )
+        return "OK" if "h264_nvenc" in (r.stdout or "") else "NO"
+    except Exception:
+        return "UNKNOWN"
+
+
+def collect_components(probe=True):
+    """自检全部组件，按分类返回列表
+
+    每项：group / name / ok / status / detail / path / installer
+    probe=False 时跳过要拉子进程的探测（版本号、NVENC），只做文件存在性检查。
+    """
+    items = []
+
+    # ---- 必需 ----
+    items.append({
+        "group": "required",
+        "name": "Python",
+        "ok": True,
+        "status": f"OK ({sys.version.split()[0]})",
+        "detail": "运行本程序的解释器（含 PyQt5 界面库）",
+        "path": sys.executable,
+        "installer": None,
+    })
+
+    ytdlp_ok = check_file(YTDLP_EXE)
+    items.append({
+        "group": "required",
+        "name": "yt-dlp",
+        "ok": ytdlp_ok,
+        "status": (
+            f"OK ({get_ytdlp_version()})" if ytdlp_ok and probe
+            else "OK" if ytdlp_ok else "MISSING"
+        ),
+        "detail": "解析与下载核心，缺失则任何链接都下不了",
+        "path": str(YTDLP_EXE),
+        "installer": None if ytdlp_ok else "ytdlp",
+    })
+
+    ffmpeg_ok = check_file(FFMPEG_EXE)
+    items.append({
+        "group": "required",
+        "name": "FFmpeg",
+        "ok": ffmpeg_ok,
+        "status": (
+            f"OK ({ffmpeg_version_text()})" if ffmpeg_ok and probe
+            else "OK" if ffmpeg_ok else "MISSING"
+        ),
+        "detail": "音视频合并与转码",
+        "path": str(FFMPEG_EXE),
+        "installer": None if ffmpeg_ok else "ffmpeg",
+    })
+
+    ffprobe_ok = check_file(FFPROBE_EXE)
+    items.append({
+        "group": "required",
+        "name": "FFprobe",
+        "ok": ffprobe_ok,
+        "status": "OK" if ffprobe_ok else "MISSING",
+        "detail": "读取时长 / 分辨率等媒体信息",
+        "path": str(FFPROBE_EXE),
+        "installer": None if ffprobe_ok else "ffmpeg",
+    })
+
+    # ---- 推荐 ----
+    runtime, runtime_path = js_runtime_lookup()
+    items.append({
+        "group": "recommended",
+        "name": "JS运行时",
+        "ok": bool(runtime),
+        "status": f"OK ({runtime})" if runtime else "MISSING",
+        "detail": "YouTube nsig 解密；缺失会退回不稳定的 Python solver",
+        "path": runtime_path or str(PORTABLE_DENO_EXE),
+        "installer": None if runtime else "jsruntime",
+    })
+
+    nvenc = nvenc_state() if probe else "UNKNOWN"
+    items.append({
+        "group": "recommended",
+        "name": "NVENC",
+        "ok": nvenc == "OK",
+        "status": nvenc,
+        "detail": "N 卡硬编码加速，取决于显卡与 FFmpeg 构建，无法安装",
+        "path": "",
+        "installer": None,
+    })
+
+    # ---- 数据与配置 ----
+    cookie_ok = cookie_state()
+    items.append({
+        "group": "data",
+        "name": "Cookie",
+        "ok": cookie_ok,
+        "status": "OK" if cookie_ok else "MISSING",
+        "detail": "由浏览器扩展同步，登录站点必需",
+        "path": str(COOKIES_DIR),
+        "installer": None,
+    })
+    items.append({
+        "group": "data",
+        "name": "UA",
+        "ok": UA_FILE.exists(),
+        "status": "OK" if UA_FILE.exists() else "MISSING",
+        "detail": "浏览器 User-Agent，缺失时用内置默认值",
+        "path": str(UA_FILE),
+        "installer": None,
+    })
+    items.append({
+        "group": "data",
+        "name": "Extension",
+        "ok": bool(UA_FILE.exists() or cookie_ok),
+        "status": "OK" if (UA_FILE.exists() or cookie_ok) else "等待扩展同步",
+        "detail": "浏览器扩展桥接状态",
+        "path": "",
+        "installer": None,
+    })
+    items.append({
+        "group": "data",
+        "name": "Proxy",
+        "ok": True,
+        "status": "SYSTEM",
+        "detail": "代理由系统 / v2rayN / TUN 负责，程序不绑定端口",
+        "path": "",
+        "installer": None,
+    })
+
+    return items
+
+
+def missing_required_installers(components=None):
+    """必需组件里可自动安装的缺失项，去重后按 yt-dlp → ffmpeg 顺序返回"""
+    items = components if components is not None else collect_components(probe=False)
+    found = []
+    for c in items:
+        if c["group"] != "required" or c["ok"] or not c["installer"]:
+            continue
+        if c["installer"] not in found:
+            found.append(c["installer"])
+    order = ("ytdlp", "ffmpeg")
+    return [name for name in order if name in found]
+
+
+def check_environment():
+    """启动环境检查，返回 [(项目, 状态), ...]
+
+    分组标题以 (标题, "") 的形式插入，状态为空即代表这一行是分组标题。
+    """
+    rows = []
+    components = collect_components()
+    for group in COMPONENT_GROUPS:
+        group_items = [c for c in components if c["group"] == group]
+        if not group_items:
+            continue
+        rows.append((f"【{COMPONENT_GROUP_TITLES[group]}】", ""))
+        for c in group_items:
+            rows.append((c["name"], c["status"]))
     return rows
+
 
 
 # ============================================================
@@ -593,7 +1147,8 @@ DEFAULT_CONFIG = {
         "x": None,
         "y": None,
         "width": 900,
-        "height": 650
+        "height": 650,
+        "maximized": False
     },
 
     "output_dir": str(DEFAULT_OUTPUT_DIR),
@@ -606,7 +1161,13 @@ DEFAULT_CONFIG = {
 
     "bridge_token": "",
 
-    "bridge_port": 5999
+    "bridge_port": 5999,
+
+    # 被用户点「✕」忽略的 yt-dlp 版本号：同一版本不再弹提示条
+    "ytdlp_update_skipped_version": "",
+
+    # 用户拒绝安装便携版 JS 运行时后不再提示
+    "js_runtime_install_skipped": False
 }
 
 
@@ -619,10 +1180,12 @@ DEFAULT_CONFIG = {
 #   POST /v1/enqueue → { url, protocolVersion } + Bearer token
 #                    → { ok: true }
 #
-# 扩展默认端口 47720，范围 47720-47729
+# 默认端口 5999。若被占用则依次尝试 5999-6008，
+# 扩展侧的自动发现范围（bridge-client.js 的 DEFAULT_PORT_RANGE）必须与此一致。
 # ============================================================
 
-BRIDGE_PORT_RANGE = list(range(47720, 47730))
+BRIDGE_DEFAULT_PORT = 5999
+BRIDGE_PORT_RANGE = list(range(BRIDGE_DEFAULT_PORT, BRIDGE_DEFAULT_PORT + 10))
 BRIDGE_PROTOCOL_VERSION = 1
 
 
@@ -754,6 +1317,10 @@ class OmniGetBridgeHandler(BaseHTTPRequestHandler):
             self.server.bridge.log(f"enqueue 收到：{url}")
             self.server.bridge.enqueue_url(url)
 
+            # 扩展的「下载时打开应用」开关：为 true 时把主窗口拉到前台
+            if data.get("openApp") is True:
+                self.server.bridge.activate_app()
+
             self.send_json(200, {"ok": True})
             return
 
@@ -819,7 +1386,8 @@ class OmniGetBridge:
     """OmniGet 扩展桥接服务器"""
 
     def __init__(self, token=None, port=None, link_file=None, log_callback=None,
-                 url_callback=None, cookies_callback=None, ua_callback=None):
+                 url_callback=None, cookies_callback=None, ua_callback=None,
+                 activate_callback=None):
         self.token = token or secrets.token_urlsafe(24)
         self.port = port
         self.link_file = link_file or LINK_FILE
@@ -827,6 +1395,7 @@ class OmniGetBridge:
         self.url_callback = url_callback  # 收到 URL 时的回调
         self.cookies_callback = cookies_callback  # 收到 Cookie 时的回调
         self.ua_callback = ua_callback  # 收到 UA 时的回调
+        self.activate_callback = activate_callback  # 需要把窗口拉到前台时的回调
         self.pairing_active = False
         self.server = None
         self.thread = None
@@ -850,6 +1419,14 @@ class OmniGetBridge:
                 self.url_callback(url)
             except Exception as e:
                 self.log(f"URL 回调执行失败：{e}")
+
+    def activate_app(self):
+        """扩展的「下载时打开应用」开关：把主窗口拉到前台"""
+        if self.activate_callback:
+            try:
+                self.activate_callback()
+            except Exception as e:
+                self.log(f"窗口激活回调执行失败：{e}")
 
     def save_referer(self, referer):
         """按根域名保存扩展同步的页面 Referer → cookies/<域名>/_referer.txt
@@ -1768,9 +2345,13 @@ class OutputFolderLineEdit(QLineEdit):
     # 在不同 Qt / Windows 环境下的拖放事件分发差异。
     # --------------------------------------------------------
 
-    def event(self, event):
+    @override
+    def event(self, a0):
 
-        event_type = event.type()
+        if a0 is None:
+            return False
+
+        event_type = a0.type()
 
         if event_type in (
             QEvent.DragEnter,
@@ -1778,25 +2359,25 @@ class OutputFolderLineEdit(QLineEdit):
         ):
 
             folder = self.get_dropped_folder(
-                event.mimeData()
+                a0.mimeData()
             )
 
             if folder:
 
-                event.setDropAction(
+                a0.setDropAction(
                     Qt.CopyAction
                 )
 
-                event.accept()
+                a0.accept()
                 return True
 
-            event.ignore()
+            a0.ignore()
             return True
 
         if event_type == QEvent.Drop:
 
             folder = self.get_dropped_folder(
-                event.mimeData()
+                a0.mimeData()
             )
 
             if folder:
@@ -1807,73 +2388,87 @@ class OutputFolderLineEdit(QLineEdit):
 
                 self.folder_dropped.emit(folder)
 
-                event.setDropAction(
+                a0.setDropAction(
                     Qt.CopyAction
                 )
 
-                event.accept()
+                a0.accept()
                 return True
 
-            event.ignore()
+            a0.ignore()
             return True
 
-        return super().event(event)
+        return super().event(a0)
 
     # --------------------------------------------------------
     # 鼠标拖入
     # --------------------------------------------------------
 
-    def dragEnterEvent(self, event):
+    @override
+    def dragEnterEvent(self, a0):
+
+        if a0 is None:
+            return
 
         folder = self.get_dropped_folder(
-            event.mimeData()
+            a0.mimeData()
         )
 
         if folder:
 
-            event.setDropAction(
+            a0.setDropAction(
                 Qt.CopyAction
             )
-            event.accept()
+            a0.accept()
             return
 
-        event.ignore()
+        a0.ignore()
 
     # --------------------------------------------------------
     # 鼠标拖动经过输入框
     # --------------------------------------------------------
 
-    def dragMoveEvent(self, event):
+    @override
+    def dragMoveEvent(self, a0):
+
+        if a0 is None:
+            return
 
         folder = self.get_dropped_folder(
-            event.mimeData()
+            a0.mimeData()
         )
 
         if folder:
 
-            event.setDropAction(
+            a0.setDropAction(
                 Qt.CopyAction
             )
-            event.accept()
+            a0.accept()
             return
 
-        event.ignore()
+        a0.ignore()
 
     # --------------------------------------------------------
     # 鼠标离开
     # --------------------------------------------------------
 
-    def dragLeaveEvent(self, event):
-        event.accept()
+    @override
+    def dragLeaveEvent(self, a0):
+        if a0 is not None:
+            a0.accept()
 
     # --------------------------------------------------------
     # 松开鼠标
     # --------------------------------------------------------
 
-    def dropEvent(self, event):
+    @override
+    def dropEvent(self, a0):
+
+        if a0 is None:
+            return
 
         folder = self.get_dropped_folder(
-            event.mimeData()
+            a0.mimeData()
         )
 
         if folder:
@@ -1884,13 +2479,13 @@ class OutputFolderLineEdit(QLineEdit):
 
             self.folder_dropped.emit(folder)
 
-            event.setDropAction(
+            a0.setDropAction(
                 Qt.CopyAction
             )
-            event.accept()
+            a0.accept()
             return
 
-        event.ignore()
+        a0.ignore()
 
 
 # ============================================================
@@ -1957,6 +2552,160 @@ class DownloadThread(QThread):
         self.success = 0
 
         self.failed = 0
+
+        # 进度映射状态（详见 _reset_url_progress）
+        self._prog_done = 0
+        self._prog_total = 1
+        self._prog_streams = 0
+        self._prog_expected = 1
+        self._prog_value = 0
+
+        # 下载详情日志节流状态（详见 _log_download_detail）
+        self._detail_ts = 0.0
+        self._detail_pct = -1.0
+
+    # --------------------------------------------------------
+    # 进度映射
+    #
+    # yt-dlp 打印的百分比是「当前媒体流」的进度，不是整体进度：
+    # YouTube 走 bv*+ba 会先下视频流 0→100，再下音频流 0→100，
+    # 直接透传会让进度条走满后倒回去重走一遍。
+    #
+    # 这里统一折算成「整批任务」的百分比：
+    #   (已完成 URL 数 + 当前 URL 内部完成比例) / URL 总数
+    # 并保证单调不回退。
+    # --------------------------------------------------------
+
+    _PROGRESS_RE = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
+
+    # 详情行：[download]  45.2% of  120.34MiB at    5.67MiB/s ETA 00:13
+    _PROGRESS_DETAIL_RE = re.compile(
+        r"\[download\]\s+(?P<pct>\d{1,3}(?:\.\d+)?)%"
+        r"(?:\s+of\s+~?\s*(?P<size>\S+))?"
+        r"(?:\s+at\s+(?P<speed>\S+))?"
+        r"(?:\s+ETA\s+(?P<eta>\S+))?"
+    )
+
+    # ffmpeg 转码进度：从它自己的输出里取总时长与已处理时长
+    _FFMPEG_DURATION_RE = re.compile(r"Duration:\s+(\d+:\d\d:\d\d(?:\.\d+)?)")
+    _FFMPEG_TIME_RE = re.compile(r"time=(\d+:\d\d:\d\d(?:\.\d+)?)")
+
+    @staticmethod
+    def _hms_to_seconds(text):
+        """把 HH:MM:SS.xx 转成秒，解析失败返回 0"""
+        try:
+            hours, minutes, seconds = str(text).split(":")
+            return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+        except Exception:
+            return 0.0
+
+    def _log_download_detail(self, line):
+        """把 yt-dlp 的进度行整理成一条人看得懂的日志（精简模式下也显示）
+
+        每秒最多一条，百分比跳变 ≥5% 时补一条，100% 一定收尾输出一条，
+        既能看到实时速度/剩余时间，又不会把日志刷爆。
+        """
+        match = self._PROGRESS_DETAIL_RE.search(line)
+        if not match:
+            return
+
+        try:
+            pct = float(match.group("pct"))
+        except (TypeError, ValueError):
+            return
+
+        now = time.time()
+        if pct < 100.0:
+            if now - self._detail_ts < 1.0 and pct - self._detail_pct < 5.0:
+                return
+
+        self._detail_ts = now
+        self._detail_pct = pct
+
+        parts = [f"{pct:.1f}%"]
+
+        size = match.group("size")
+        if size:
+            parts.append(f"共 {size}")
+
+        speed = match.group("speed")
+        if speed and speed.lower() != "unknown":
+            parts.append(speed)
+
+        eta = match.group("eta")
+        if eta and eta.lower() != "unknown":
+            parts.append(f"剩余 {eta}")
+
+        stream = ""
+        if self._prog_expected > 1:
+            current = min(max(self._prog_streams, 1), self._prog_expected)
+            stream = f"流 {current}/{self._prog_expected} · "
+
+        self.log(f"[下载] {stream}" + " · ".join(parts))
+
+    def _download_stage_text(self, line):
+        """把 yt-dlp 的阶段行翻译成中文提示，非阶段行返回 None"""
+        if line.startswith("[download] Destination:"):
+            name = line.split("Destination:", 1)[1].strip()
+            return f"[下载] 开始下载：{Path(name).name}"
+
+        if "has already been downloaded" in line:
+            return "[下载] 文件已存在，跳过下载"
+
+        if line.startswith("[Merger]"):
+            return "[下载] 音视频下载完成，正在合并…"
+
+        if line.startswith("[ExtractAudio]"):
+            return "[下载] 正在提取音轨…"
+
+        return None
+
+    def _reset_url_progress(self, index, total):
+        """开始处理某个 URL 时重置进度基准（index 从 1 开始）"""
+        self._prog_total = max(int(total), 1)
+        self._prog_done = min(max(int(index) - 1, 0), self._prog_total)
+        self._prog_streams = 0
+        self._prog_expected = 1
+        self._prog_value = int(self._prog_done / self._prog_total * 100)
+        self._detail_ts = 0.0
+        self._detail_pct = -1.0
+
+    def _emit_url_progress(self, fraction):
+        """fraction 为当前 URL 的完成比例（0.0-1.0）
+
+        下载完成后还有合并 / 转码 / 校验，所以下载阶段最高只走到 95%，
+        剩下的 5% 留给后处理，由 _sync_url_progress 在该 URL 结束时补齐。
+        """
+        fraction = min(max(float(fraction), 0.0), 0.95)
+
+        value = int(
+            (self._prog_done + fraction) / self._prog_total * 100
+        )
+        value = min(max(value, 0), 100)
+
+        if value > self._prog_value:
+            self._prog_value = value
+            self.progress_signal.emit(value)
+
+    def _sync_url_progress(self, value):
+        """URL 处理结束时把基准对齐到已完成比例"""
+        value = min(max(int(value), 0), 100)
+        self._prog_value = value
+        self.progress_signal.emit(value)
+
+    def _emit_post_progress(self, fraction):
+        """后处理（转码）阶段：把当前 URL 的进度从 95% 推到 100%"""
+        fraction = min(max(float(fraction), 0.0), 1.0)
+
+        value = int(
+            (self._prog_done + 0.95 + 0.05 * fraction)
+            / self._prog_total * 100
+        )
+        value = min(max(value, 0), 100)
+
+        if value > self._prog_value:
+            self._prog_value = value
+            self.progress_signal.emit(value)
 
     def stop(self):
 
@@ -2139,23 +2888,9 @@ class DownloadThread(QThread):
     def js_runtime_info(self):
         """检测 JS 运行时，返回 (runtime, 绝对路径)；不存在返回 (None, "")
 
-        参考 OmniGet：独立打包的 yt-dlp 无法自己从 PATH 发现运行时，
-        必须检测绝对路径并显式传 --js-runtimes runtime:path。
+        统一走模块级 js_runtime_lookup()，与环境检查、提示条安装共用同一套优先级。
         """
-        import shutil
-        if sys.platform == "win32":
-            portable_node = RUN_DIR / "nodejs" / "node.exe"
-            if portable_node.exists():
-                return "node", str(portable_node)
-        for runtime, binary in (("node", "node"), ("deno", "deno"), ("bun", "bun")):
-            path = shutil.which(binary)
-            if path and os.path.exists(path):
-                return runtime, str(Path(path).resolve())
-        if sys.platform == "win32":
-            for path in (r"C:\Program Files\nodejs\node.exe", r"C:\Program Files (x86)\nodejs\node.exe"):
-                if os.path.exists(path):
-                    return "node", path
-        return None, ""
+        return js_runtime_lookup()
 
     # Cookie 新鲜度阈值（秒）：超过此时间认为可能过期
     COOKIE_STALE_THRESHOLD = 2 * 3600  # 2 小时
@@ -2301,14 +3036,30 @@ class DownloadThread(QThread):
         return None
 
     def build_ytdlp_args(self, url, job_dir, ua, cookie_args, player_client=None,
-                         referer=None, concurrency=None):
+                         referer=None, concurrency=None, extra_args=None,
+                         simplify_format=False):
         """构建 yt-dlp 命令参数（统一 Runner）
 
         支持 YouTube player_client / 通用 Referer 双通道 / 扩展附加 Headers /
         JS Runtime / TikTok 并发配置；代理不主动设置，遵循系统环境代理。
+
+        extra_args：重试时按错误追加的参数（如 --force-ipv4）。
+        simplify_format：去掉 -f 与 --merge-output-format，退回 yt-dlp 默认格式，
+        用于「requested format not available」这类只能靠放弃指定格式解决的失败。
         """
         self.log(f"[DEBUG] build_ytdlp_args 被调用: {url[:60]}...")
         output_template = job_dir / "source.%(ext)s"
+
+        is_youtube = detect_platform(url) == "youtube"
+
+        # 格式选择器：YouTube 走 m4a 优先的选择器（合并 mp4 时音频免转码）
+        if simplify_format:
+            format_args = []
+        elif is_youtube:
+            format_args = ["-f", YOUTUBE_FORMAT_SELECTOR,
+                           "--merge-output-format", "mp4"]
+        else:
+            format_args = ["-f", "bv*+ba/b", "--merge-output-format", "mp4"]
 
         cmd = [
             str(YTDLP_EXE),
@@ -2320,8 +3071,7 @@ class DownloadThread(QThread):
             "--encoding", "utf-8",
             "--user-agent", ua,
             "--ffmpeg-location", str(FFMPEG_EXE),
-            "-f", "bv*+ba/b",
-            "--merge-output-format", "mp4",
+            *format_args,
             "--windows-filenames",
             "--socket-timeout", "30",
             "--retries", "5",
@@ -2357,7 +3107,6 @@ class DownloadThread(QThread):
             cmd.extend(["--add-header", header])
 
         # 非 YouTube 平台：分块下载（参考 OmniGet；YouTube 不加以避免触发风控）
-        is_youtube = detect_platform(url) == "youtube"
         if not is_youtube:
             cmd.extend(["--http-chunk-size", "10M"])
 
@@ -2383,13 +3132,25 @@ class DownloadThread(QThread):
             cmd.extend(["-N", str(workers)])
             self.log(f"[yt-dlp] TikTok 模式：启用 {workers} 个并发片段")
 
-        # YouTube 特定参数
+        # YouTube 特定参数（对齐 OmniGet 的 download_video 基线）
         if is_youtube:
-            # 使用指定的 player_client，默认用 default
-            client = player_client or "default"
-            cmd.extend(["--extractor-args", f"youtube:player_client={client}"])
-            # 限速避免被 YouTube 检测
-            cmd.extend(["--throttled-rate", "100K"])
+            # 只在没被上层级联改写时才带 player_client；
+            # simplify_format 时 OmniGet 会把 player_client 一起摘掉，交给默认逻辑
+            if not simplify_format:
+                client = player_client or "default"
+                cmd.extend(["--extractor-args", f"youtube:player_client={client}"])
+
+            # 并发分片：YouTube 的 DASH 流是分片下载，单连接跑不满带宽。
+            # 被 429 过的话自动收敛，避免越重试越被限。
+            workers = concurrency or youtube_concurrent_fragments()
+            cmd.extend(["-N", str(workers)])
+
+            # --throttled-rate 不是限速，而是「速度低于该值就判定被限速并重新提取」。
+            cmd.extend(["--throttled-rate", YOUTUBE_THROTTLED_RATE])
+
+        # 重试级联追加的参数（--force-ipv4 / --restrict-filenames / 备用 client 等）
+        if extra_args:
+            cmd.extend(extra_args)
 
         cmd.append(url)
         return cmd
@@ -2429,6 +3190,72 @@ class DownloadThread(QThread):
         """判断是否为网络波动导致的错误（可重试）"""
         text = stderr_text.lower()
         return any(ind in text for ind in self.NETWORK_ERROR_INDICATORS)
+
+    def _plan_youtube_retry(self, output_text, attempt, state):
+        """按 yt-dlp 的真实报错决定下一次要改什么参数（OmniGet 的错误级联）
+
+        直接改写 state：player_client / extra_args / simplify_format / wait。
+        返回 True 表示参数确实变了、值得再试；False 表示这个失败换参数也没用。
+        """
+        global _youtube_429_hits
+
+        text = (output_text or "").lower()
+        extra = state.setdefault("extra_args", [])
+        changed = False
+
+        if "http error 429" in text:
+            _youtube_429_hits += 1
+            # 限流退避比普通网络重试激进得多：10s / 20s / 40s
+            state["wait"] = 10 * (2 ** attempt)
+            client = "mweb" if attempt == 0 else "ios"
+            state["player_client"] = client
+            self.log(f"[yt-dlp] 429 限流：等待 {state['wait']}s 并切到 "
+                     f"player_client={client}（-N 收敛到 "
+                     f"{youtube_concurrent_fragments()}）")
+            changed = True
+        elif "nsig" in text:
+            # nsig 解密失败：换一个不需要解签名的 client
+            client = "ios" if attempt == 0 else "mweb"
+            state["player_client"] = client
+            self.log(f"[yt-dlp] nsig 解密失败：切到 player_client={client}")
+            changed = True
+
+        # SABR-only：web 提取器给的格式普通下载器拉不动，按级联换 client
+        if "sabr" in text and attempt < len(YOUTUBE_SABR_CLIENT_CASCADE):
+            client = YOUTUBE_SABR_CLIENT_CASCADE[attempt]
+            state["player_client"] = client
+            self.log(f"[yt-dlp] 只剩 SABR 格式：切到 player_client={client}")
+            changed = True
+
+        if ("http error 403" in text or "forbidden" in text) \
+                and "--force-ipv4" not in extra:
+            extra.append("--force-ipv4")
+            self.log("[yt-dlp] 403 Forbidden：追加 --force-ipv4")
+            changed = True
+
+        if ("invalid argument" in text or "errno 22" in text) \
+                and "--restrict-filenames" not in extra:
+            extra.append("--restrict-filenames")
+            self.log("[yt-dlp] 文件名被系统拒绝：追加 --restrict-filenames")
+            changed = True
+
+        # 指定格式拿不到 / 后处理失败：放弃 -f 与 player_client，退回 yt-dlp 默认。
+        # 只做一次，简化过还失败说明不是格式的问题。
+        if (("requested format" in text and "not available" in text)
+                or "postprocessing" in text) and not state.get("simplify_format"):
+            state["simplify_format"] = True
+            state["player_client"] = None
+            self.log("[yt-dlp] 格式/后处理失败：去掉 -f 与 player_client，"
+                     "退回 yt-dlp 默认格式")
+            changed = True
+
+        # PO Token：本地没有 provider 就换不出来，如实报出来而不是假装重试
+        if youtube_pot_missing(text):
+            self.log("[yt-dlp] ⚠ YouTube 要求 PO Token，本机未配置 provider。"
+                     "换 client 只是碰运气，稳定方案是登录 Cookie 或自建 "
+                     "bgutil-ytdlp-pot-provider。")
+
+        return changed
 
     def _cleanup_job_dir(self, job_dir):
         """清理 job_dir 中的残留文件（重试前调用）"""
@@ -2520,6 +3347,8 @@ class DownloadThread(QThread):
         result = "FAILED"
         final_class = None
         attempts = 0
+        # YouTube 重试状态：由 _plan_youtube_retry 按 stderr 逐次改写
+        yt_state = {}
 
         try:
             # 网络重试循环（原版）
@@ -2531,6 +3360,8 @@ class DownloadThread(QThread):
                 # 网络重试时清理残留文件，确保 yt-dlp 从头开始
                 if net_attempt > 0:
                     delay = self.NETWORK_RETRY_DELAYS[min(net_attempt - 1, len(self.NETWORK_RETRY_DELAYS) - 1)]
+                    # 429 退避比普通网络重试长，取两者较大值
+                    delay = max(delay, yt_state.pop("wait", 0))
                     self.log(f"")
                     self.log(f"[网络重试 {net_attempt}/{self.NETWORK_MAX_RETRIES}] 等待 {delay} 秒后重试...")
                     time.sleep(delay)
@@ -2540,8 +3371,13 @@ class DownloadThread(QThread):
                 attempts = net_attempt + 1
                 self._task_log_request(task_id, cookie_args, ua, referer, attempts, None)
 
-                cmd = self.build_ytdlp_args(url, job_dir, ua, cookie_args,
-                                            player_client=None, referer=referer)
+                cmd = self.build_ytdlp_args(
+                    url, job_dir, ua, cookie_args,
+                    player_client=yt_state.get("player_client"),
+                    referer=referer,
+                    extra_args=yt_state.get("extra_args"),
+                    simplify_format=yt_state.get("simplify_format", False),
+                )
 
                 if net_attempt == 0:
                     self.log(f"开始下载：{url}")
@@ -2560,6 +3396,12 @@ class DownloadThread(QThread):
 
                 # 分析错误原因
                 stderr_text = output_text.lower()
+
+                # YouTube：先按 OmniGet 的错误级联调参数（换 player_client /
+                # 追加 --force-ipv4 / 退回默认格式），再决定是否重试
+                if is_youtube and net_attempt < self.NETWORK_MAX_RETRIES:
+                    if self._plan_youtube_retry(output_text, net_attempt, yt_state):
+                        continue
 
                 # 判断是否可重试的网络错误（原版）
                 if self._is_network_error(stderr_text):
@@ -2621,13 +3463,33 @@ class DownloadThread(QThread):
                 # 标记为原始输出：精简模式下不进 GUI 日志（错误/警告仍会显示）
                 self.log(LOG_RAW_MARK + line)
 
-                if "%" in line:
+                # 新媒体流开始：文件名含 .f<格式号>. 说明是分离的视频/音频流，
+                # 这种情况 yt-dlp 会依次下两条流，各自 0→100
+                if line.startswith("[download] Destination:"):
+                    if re.search(r"\.f\d+\.", line):
+                        self._prog_expected = 2
+                    self._prog_streams += 1
+                    self._detail_pct = -1.0
+
+                # 阶段提示与进度详情：精简模式下也显示，让下载过程可见
+                stage = self._download_stage_text(line)
+                if stage:
+                    self.log(stage)
+                else:
+                    self._log_download_detail(line)
+
+                match = self._PROGRESS_RE.search(line)
+                if match:
                     try:
-                        progress = int(line.split("%")[0].split()[-1])
-                        if 0 <= progress <= 100:
-                            self.progress_signal.emit(progress)
+                        stream_frac = float(match.group(1)) / 100.0
                     except ValueError:
-                        pass
+                        stream_frac = None
+                    if stream_frac is not None:
+                        finished_streams = max(self._prog_streams - 1, 0)
+                        self._emit_url_progress(
+                            (finished_streams + stream_frac)
+                            / self._prog_expected
+                        )
 
         process.wait()
         return process.returncode == 0, "\n".join(stderr_output)
@@ -3001,14 +3863,14 @@ class DownloadThread(QThread):
                         f.write(chunk)
                         downloaded += len(chunk)
                         if total > 0:
-                            self.progress_signal.emit(min(int(downloaded * 100 / total), 99))
+                            self._emit_url_progress(downloaded / total)
 
             if total > 0 and downloaded < total * 0.95:
                 task_debug(f"[NATIVE_DL] FAILED reason=incomplete {downloaded}/{total}")
                 return False
 
             task_debug(f"[NATIVE_DL] SUCCESS size={downloaded}")
-            self.progress_signal.emit(100)
+            self._emit_url_progress(1.0)
             return True
         except Exception as e:
             task_debug(f"[NATIVE_DL] FAILED reason=exception")
@@ -3975,6 +4837,9 @@ class DownloadThread(QThread):
             bufsize=1
         )
 
+        total_seconds = 0.0
+        last_log_ts = 0.0
+
         for line in iter(
             process.stdout.readline,
             ""
@@ -3996,11 +4861,36 @@ class DownloadThread(QThread):
 
             if line:
 
-                if (
-                    "frame=" in line
-                    or
-                    "time=" in line
-                    or
+                # 总时长只出现在 ffmpeg 打印的输入信息里，取一次即可
+                if total_seconds <= 0:
+                    duration_match = self._FFMPEG_DURATION_RE.search(line)
+                    if duration_match:
+                        total_seconds = self._hms_to_seconds(
+                            duration_match.group(1)
+                        )
+
+                time_match = self._FFMPEG_TIME_RE.search(line)
+
+                if time_match:
+                    # 转码进度：每秒最多一条日志，同时把进度条从 95% 推到 100%
+                    done_seconds = self._hms_to_seconds(time_match.group(1))
+                    now = time.time()
+
+                    if total_seconds > 0:
+                        fraction = min(done_seconds / total_seconds, 1.0)
+                        self._emit_post_progress(fraction)
+
+                        if now - last_log_ts >= 1.0 or fraction >= 1.0:
+                            last_log_ts = now
+                            self.log(
+                                f"[转码] {fraction * 100:.1f}%"
+                                f"（{done_seconds:.0f}s / {total_seconds:.0f}s）"
+                            )
+                    elif now - last_log_ts >= 1.0:
+                        last_log_ts = now
+                        self.log(f"[转码] 已处理 {done_seconds:.0f}s")
+
+                elif (
                     "error" in line.lower()
                     or
                     "failed" in line.lower()
@@ -4091,6 +4981,8 @@ class DownloadThread(QThread):
     ):
 
         self.current_url = url
+
+        self._reset_url_progress(index, total)
 
         self.current_signal.emit(
             index,
@@ -4373,7 +5265,7 @@ class DownloadThread(QThread):
                     100
                 )
 
-                self.progress_signal.emit(
+                self._sync_url_progress(
                     progress
                 )
 
@@ -4869,6 +5761,156 @@ class LinkListWidget(QListWidget):
 
 
 # ============================================================
+# 环境依赖面板
+#
+# 按【必需 / 推荐 / 数据与配置】分组列出每个组件的状态、说明与路径，
+# 缺失且能自动装的给「自动安装」按钮，安装动作复用主窗口的组件安装流程
+# （进度与结果同步显示在主窗口通知条与日志里）。
+# ============================================================
+
+class EnvironmentDialog(QDialog):
+
+    # 自检结果（后台线程 → GUI 线程）
+    components_ready = pyqtSignal(list)
+
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        self.main = parent
+
+        self.setWindowTitle("环境依赖")
+        self.setWindowIcon(QIcon(str(BASE_DIR / "icon.png")))
+        self.setMinimumWidth(680)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+
+        self.hint = QLabel("正在检测…")
+        self.hint.setWordWrap(True)
+        layout.addWidget(self.hint)
+
+        self.groups_layout = QVBoxLayout()
+        self.groups_layout.setSpacing(10)
+        layout.addLayout(self.groups_layout)
+
+        layout.addStretch(1)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+
+        self.refresh_btn = QPushButton("重新检测")
+        self.refresh_btn.setCursor(Qt.PointingHandCursor)
+        self.refresh_btn.clicked.connect(self.refresh)
+        btn_row.addWidget(self.refresh_btn)
+
+        close_btn = QPushButton("关闭")
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.clicked.connect(self.close)
+        btn_row.addWidget(close_btn)
+
+        layout.addLayout(btn_row)
+
+        self.components_ready.connect(self._render)
+        parent.component_installed_signal.connect(self._on_component_installed)
+
+        self.refresh()
+
+    def refresh(self):
+        """后台线程重新自检：读版本号与探测 NVENC 要拉子进程，不能卡界面"""
+        self.refresh_btn.setEnabled(False)
+        self.hint.setText("正在检测…（读取版本与 NVENC 支持需要几秒）")
+
+        def _worker():
+            try:
+                items = collect_components()
+            except Exception as e:
+                items = [{
+                    "group": "required",
+                    "name": "自检",
+                    "ok": False,
+                    "status": f"失败：{e}",
+                    "detail": "",
+                    "path": "",
+                    "installer": None,
+                }]
+            self.components_ready.emit(items)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_component_installed(self, _name, _ok, _info):
+        self.refresh()
+
+    def _clear_groups(self):
+        while self.groups_layout.count():
+            item = self.groups_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+
+    def _render(self, items):
+        self._clear_groups()
+
+        missing = [
+            c["name"] for c in items
+            if c["group"] == "required" and not c["ok"]
+        ]
+        self.hint.setText(
+            "必需组件缺失：" + "、".join(missing) + "（可点右侧按钮自动安装）"
+            if missing else "必需组件齐全，可以正常下载"
+        )
+
+        for group in COMPONENT_GROUPS:
+            group_items = [c for c in items if c["group"] == group]
+            if not group_items:
+                continue
+
+            box = QGroupBox(COMPONENT_GROUP_TITLES[group])
+            grid = QGridLayout(box)
+            grid.setContentsMargins(10, 8, 10, 8)
+            grid.setHorizontalSpacing(10)
+            grid.setVerticalSpacing(6)
+
+            for row, component in enumerate(group_items):
+                name_label = QLabel(component["name"])
+                name_label.setMinimumWidth(84)
+                grid.addWidget(name_label, row, 0)
+
+                status_label = QLabel(component["status"])
+                status_label.setMinimumWidth(160)
+                status_label.setStyleSheet(
+                    "color: #a6e3a1;" if component["ok"] else "color: #f38ba8;"
+                )
+                grid.addWidget(status_label, row, 1)
+
+                detail_label = QLabel(component["detail"])
+                detail_label.setObjectName("smallLabel")
+                detail_label.setWordWrap(True)
+                if component["path"]:
+                    detail_label.setToolTip(component["path"])
+                grid.addWidget(detail_label, row, 2)
+
+                if component["installer"]:
+                    install_btn = QPushButton("自动安装")
+                    install_btn.setCursor(Qt.PointingHandCursor)
+                    install_btn.clicked.connect(
+                        lambda _checked=False, n=component["installer"]:
+                            self._install(n)
+                    )
+                    grid.addWidget(install_btn, row, 3)
+
+            grid.setColumnStretch(2, 1)
+            self.groups_layout.addWidget(box)
+
+        self.refresh_btn.setEnabled(True)
+
+    def _install(self, name):
+        label, size = MainWindow.COMPONENT_INSTALLERS.get(name, (name, ""))
+        self.hint.setText(f"正在安装 {label}（{size}），进度见主窗口通知条与日志…")
+        self.main.start_component_install(name)
+
+
+# ============================================================
 # 主窗口
 # ============================================================
 
@@ -4879,8 +5921,17 @@ class MainWindow(QMainWindow):
     bridge_url_signal = pyqtSignal(str)
     bridge_cookies_signal = pyqtSignal(list, str, str)  # cookies, ua, source_url
     bridge_ua_signal = pyqtSignal(str)
+    bridge_activate_signal = pyqtSignal()  # 扩展请求「下载时打开应用」：把主窗口拉到前台
     # 环境检查结果（后台线程 → GUI 线程）：env_rows, ytdlp_version
     env_ready_signal = pyqtSignal(list, str)
+    # yt-dlp 每日版本检查结果：local, latest, need_update, reason
+    ytdlp_update_signal = pyqtSignal(str, str, bool, str)
+    # yt-dlp 更新执行完毕：ok, version
+    ytdlp_updated_signal = pyqtSignal(bool, str)
+    # 组件自动安装完毕：组件名(ytdlp/ffmpeg/jsruntime), ok, 版本号或错误信息
+    component_installed_signal = pyqtSignal(str, bool, str)
+    # 后台线程往日志框输出（线程安全）
+    worker_log_signal = pyqtSignal(str)
 
     def __init__(self):
 
@@ -4943,25 +5994,36 @@ class MainWindow(QMainWindow):
 
     def setup_window(self):
 
+        self.setMinimumSize(
+            760,
+            560
+        )
+
         window_cfg = self.config.get(
             "window",
             {}
         )
 
-        width = int(
-            window_cfg.get(
-                "width",
-                900
-            )
-            or 900
+        width = max(
+            int(
+                window_cfg.get(
+                    "width",
+                    900
+                )
+                or 900
+            ),
+            760
         )
 
-        height = int(
-            window_cfg.get(
-                "height",
-                650
-            )
-            or 650
+        height = max(
+            int(
+                window_cfg.get(
+                    "height",
+                    650
+                )
+                or 650
+            ),
+            560
         )
 
         self.resize(
@@ -4981,6 +6043,13 @@ class MainWindow(QMainWindow):
             isinstance(x, int)
             and
             isinstance(y, int)
+            and
+            self._geometry_visible(
+                x,
+                y,
+                width,
+                height
+            )
         ):
 
             self.move(
@@ -4988,10 +6057,47 @@ class MainWindow(QMainWindow):
                 y
             )
 
-        self.setMinimumSize(
-            760,
-            560
+        # 上次退出时是最大化：先置状态，等 show() 时直接以最大化呈现
+        if window_cfg.get("maximized"):
+
+            self.setWindowState(
+                self.windowState()
+                | Qt.WindowMaximized
+            )
+
+    @staticmethod
+    def _geometry_visible(x, y, width, height):
+        """判断窗口区域是否仍落在某块屏幕的可用范围内。
+
+        显示器数量或分辨率变化后，旧坐标可能完全在屏幕外，
+        导致窗口打开后不可见，此时应回退到系统默认位置。
+        """
+
+        rect = QRect(
+            x,
+            y,
+            width,
+            height
         )
+
+        for screen in QApplication.screens():
+
+            visible = (
+                screen
+                .availableGeometry()
+                .intersected(rect)
+            )
+
+            # 至少露出一块能用鼠标抓住标题栏的区域
+            if (
+                visible.width() >= 160
+                and
+                visible.height() >= 40
+            ):
+
+                return True
+
+        return False
 
     def setup_ui(self):
 
@@ -5057,6 +6163,31 @@ class MainWindow(QMainWindow):
             Qt.AlignCenter
         )
 
+        # 环境依赖入口：分组查看必需 / 推荐组件自检结果，并安装缺失项
+        self.env_btn = QPushButton("环境")
+
+        self.env_btn.setObjectName(
+            "noticeAction"
+        )
+
+        self.env_btn.setCursor(
+            Qt.PointingHandCursor
+        )
+
+        self.env_btn.setToolTip(
+            "查看必需 / 推荐组件的自检结果，缺失项可一键自动安装"
+        )
+
+        self.env_btn.clicked.connect(
+            self.open_environment_dialog
+        )
+
+        top_layout.addWidget(
+            self.env_btn,
+            0, 0,
+            Qt.AlignLeft | Qt.AlignVCenter
+        )
+
         top_layout.addWidget(
             self.lbl_status,
             0, 0,
@@ -5065,6 +6196,11 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(
             top_layout
+        )
+
+        # 通知条：默认隐藏，空闲时用于提示 yt-dlp 新版本 / 缺少 JS 运行时
+        main_layout.addWidget(
+            self._build_notice_bar()
         )
 
         setting_frame = QFrame()
@@ -5642,6 +6778,361 @@ class MainWindow(QMainWindow):
             1
         )
 
+    # ========================================================
+    # 顶部通知条：yt-dlp 新版本提示 / JS 运行时缺失提示
+    # 只在空闲（没有下载任务在跑）时弹出，忙时挂起到任务结束
+    # ========================================================
+
+    def _build_notice_bar(self):
+
+        self.notice_bar = QFrame()
+
+        self.notice_bar.setObjectName(
+            "noticeBar"
+        )
+
+        notice_layout = QHBoxLayout(
+            self.notice_bar
+        )
+
+        notice_layout.setContentsMargins(12, 6, 8, 6)
+
+        notice_layout.setSpacing(8)
+
+        self.notice_label = QLabel("")
+
+        self.notice_label.setObjectName(
+            "noticeText"
+        )
+
+        self.notice_label.setWordWrap(True)
+
+        notice_layout.addWidget(
+            self.notice_label,
+            1
+        )
+
+        self.notice_action_btn = QPushButton("")
+
+        self.notice_action_btn.setObjectName(
+            "noticeAction"
+        )
+
+        self.notice_action_btn.setCursor(
+            Qt.PointingHandCursor
+        )
+
+        self.notice_action_btn.clicked.connect(
+            self._on_notice_action
+        )
+
+        notice_layout.addWidget(
+            self.notice_action_btn
+        )
+
+        self.notice_close_btn = QPushButton("✕")
+
+        self.notice_close_btn.setObjectName(
+            "noticeClose"
+        )
+
+        self.notice_close_btn.setFixedWidth(26)
+
+        self.notice_close_btn.setCursor(
+            Qt.PointingHandCursor
+        )
+
+        self.notice_close_btn.clicked.connect(
+            self._on_notice_dismiss
+        )
+
+        notice_layout.addWidget(
+            self.notice_close_btn
+        )
+
+        self._notice_action = None
+        self._notice_dismiss = None
+        self._notice_queue = []
+
+        self.notice_bar.setVisible(False)
+
+        return self.notice_bar
+
+    def show_notice(self, text, action_text=None, action=None,
+                    dismiss=None, kind="info"):
+        """立即显示通知条；kind 决定配色：info / warn / ok"""
+        self.notice_label.setText(text)
+
+        self._notice_action = action
+        self._notice_dismiss = dismiss
+
+        if action_text and action:
+            self.notice_action_btn.setText(action_text)
+            self.notice_action_btn.setEnabled(True)
+            self.notice_action_btn.setVisible(True)
+        else:
+            self.notice_action_btn.setVisible(False)
+
+        self.notice_bar.setProperty("kind", kind)
+
+        style = self.notice_bar.style()
+        if style is not None:
+            style.unpolish(self.notice_bar)
+            style.polish(self.notice_bar)
+
+        self.notice_bar.setVisible(True)
+
+    def set_notice_text(self, text):
+        self.notice_label.setText(text)
+
+    def hide_notice(self):
+        self.notice_bar.setVisible(False)
+        self._notice_action = None
+        self._notice_dismiss = None
+
+    def _auto_hide_notice(self):
+        """成功类提示自动消失，并让位给队列里的下一条"""
+        self.hide_notice()
+        self.flush_pending_notice()
+
+    def _on_notice_action(self):
+        action = self._notice_action
+        if action:
+            action()
+
+    def _on_notice_dismiss(self):
+        dismiss = self._notice_dismiss
+        self.hide_notice()
+        if dismiss:
+            dismiss()
+        # 腾出位置后再弹队列里的下一条（延后一轮事件循环，避免重入）
+        QTimer.singleShot(0, self.flush_pending_notice)
+
+    def _is_idle(self):
+        """当前没有下载任务在跑"""
+        thread = self.download_thread
+        return not (thread is not None and thread.isRunning())
+
+    def queue_notice(self, text, action_text=None, action=None,
+                     dismiss=None, kind="info"):
+        """空闲且当前没有别的提示占位时立刻弹；否则排队，等腾出位置再弹"""
+        payload = (text, action_text, action, dismiss, kind)
+
+        if self._is_idle() and not self.notice_bar.isVisible():
+            self.show_notice(*payload)
+        else:
+            self._notice_queue.append(payload)
+
+    def flush_pending_notice(self):
+        """空闲且提示条空闲时，弹出排队中的下一条提示"""
+        if not self._notice_queue:
+            return
+
+        if not self._is_idle() or self.notice_bar.isVisible():
+            return
+
+        self.show_notice(*self._notice_queue.pop(0))
+
+    # ========================================================
+    # 环境依赖面板入口
+    # ========================================================
+
+    def open_environment_dialog(self):
+        """打开（或复用）环境依赖面板，每次打开都重新自检一次"""
+        dialog = getattr(self, "_env_dialog", None)
+
+        if dialog is None:
+            dialog = EnvironmentDialog(self)
+            self._env_dialog = dialog
+        else:
+            dialog.refresh()
+
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    # ========================================================
+    # yt-dlp 每日版本检查 → 通知条
+    # ========================================================
+
+    def _on_ytdlp_update_checked(self, local, latest, need_update, reason):
+        """每日版本检查结果（GUI 线程）"""
+        self.log(
+            f"[YT-DLP] update_check={reason} "
+            f"local={local} latest={latest or 'NA'}"
+        )
+
+        if not need_update:
+            return
+
+        if self.config.get("ytdlp_update_skipped_version", "") == latest:
+            self.log(f"[YT-DLP] 新版本 {latest} 已被忽略，不再提示")
+            return
+
+        self.queue_notice(
+            f"yt-dlp 有新版本可更新：{local} → {latest}",
+            "立即更新",
+            lambda: self._start_ytdlp_update(latest),
+            lambda: self.config.set("ytdlp_update_skipped_version", latest),
+            "info"
+        )
+
+    def _start_ytdlp_update(self, latest):
+        """更新 yt-dlp：后台线程执行，避免卡界面；下载中不动 exe"""
+        if not self._is_idle():
+            self.set_notice_text(
+                "正在下载视频，等当前任务结束后再点更新"
+            )
+            return
+
+        self.notice_action_btn.setEnabled(False)
+
+        self.set_notice_text(f"正在更新 yt-dlp → {latest} …")
+
+        self.log(f"[YT-DLP] 开始更新 → {latest}")
+
+        def _worker():
+            ok = ytdlp_perform_update()
+            if ok:
+                reset_ytdlp_version_cache()
+            self.ytdlp_updated_signal.emit(ok, get_ytdlp_version())
+
+        threading.Thread(
+            target=_worker,
+            daemon=True
+        ).start()
+
+    def _on_ytdlp_updated(self, ok, version):
+        if ok:
+            self.log(f"[YT-DLP] 更新完成，当前版本 {version}")
+            self.show_notice(
+                f"yt-dlp 已更新到 {version}",
+                kind="ok"
+            )
+            QTimer.singleShot(6000, self._auto_hide_notice)
+        else:
+            self.log("[YT-DLP] 更新失败，继续使用当前版本")
+            self.show_notice(
+                "yt-dlp 更新失败（网络或文件占用），仍在使用当前版本",
+                "重试",
+                lambda: self._start_ytdlp_update(version),
+                None,
+                "warn"
+            )
+
+    # ========================================================
+    # 组件缺失 → 自动下载安装（通知条同步显示进度与结果）
+    #
+    # 必需组件（yt-dlp / FFmpeg）在启动自检后按顺序自动补齐；
+    # 推荐组件（JS 运行时）仍由提示条上的按钮触发，走同一套安装流程。
+    # ========================================================
+
+    COMPONENT_INSTALLERS = {
+        "ytdlp": ("yt-dlp", "约 18MB"),
+        "ffmpeg": ("FFmpeg / FFprobe", "约 105MB"),
+        "jsruntime": ("JS 运行时（Deno）", "约 40MB"),
+    }
+
+    def start_auto_install(self, names):
+        """按顺序自动安装缺失组件（一个装完再装下一个，避免抢带宽）"""
+        self._install_queue = list(names)
+        self._install_next()
+
+    def _install_next(self):
+        if not self._install_queue:
+            self._start_daily_update_check()
+            return
+        self.start_component_install(self._install_queue.pop(0))
+
+    def start_component_install(self, name):
+        """下载并安装单个组件：后台线程执行，不阻塞界面"""
+        label, size = self.COMPONENT_INSTALLERS[name]
+
+        self.log(f"[自检] {label} 缺失，开始自动下载（{size}）")
+
+        self.show_notice(
+            f"缺少 {label}，正在自动下载（{size}）…",
+            kind="warn"
+        )
+
+        def _worker():
+            if name == "ytdlp":
+                ok, info = ytdlp_install_missing(
+                    log=self.worker_log_signal.emit
+                )
+            elif name == "ffmpeg":
+                ok, info = install_ffmpeg_bundle(
+                    log=self.worker_log_signal.emit
+                )
+            else:
+                ok, info = install_portable_js_runtime(
+                    log=self.worker_log_signal.emit
+                )
+            self.component_installed_signal.emit(name, ok, info)
+
+        threading.Thread(
+            target=_worker,
+            daemon=True
+        ).start()
+
+    def _on_component_installed(self, name, ok, info):
+        label, _size = self.COMPONENT_INSTALLERS.get(name, (name, ""))
+
+        if ok:
+            self.log(f"[自检] {label} 安装完成：{info}")
+            self.show_notice(
+                f"{label} 已自动安装完成（{info}）",
+                kind="ok"
+            )
+            QTimer.singleShot(6000, self._auto_hide_notice)
+            self._install_next()
+        else:
+            self.log(f"[自检] {label} 自动下载失败：{info}")
+            self.show_notice(
+                f"{label} 自动下载失败（{info}）",
+                "重试",
+                lambda: self.start_component_install(name),
+                None,
+                "warn"
+            )
+
+    def _start_daily_update_check(self):
+        """每天第一次启动检查 yt-dlp 版本：后台线程，不阻塞界面也不打断下载；
+        有新版本时不静默替换，交给通知条在空闲时弹出，由用户决定是否更新。"""
+        if not check_file(YTDLP_EXE):
+            return
+
+        check_ytdlp_update_async(
+            callback=lambda local, latest, need, reason:
+                self.ytdlp_update_signal.emit(local, latest or "", need, reason)
+        )
+
+    # ========================================================
+    # JS 运行时缺失 → 通知条一键安装便携版
+    # ========================================================
+
+    def _check_js_runtime_notice(self):
+        runtime, path = js_runtime_lookup()
+
+        if runtime:
+            self.log(f"[JS Runtime] {runtime} → {path}")
+            return
+
+        self.log(
+            "[JS Runtime] 未检测到（YouTube 等站点会退回 native Python solver）"
+        )
+
+        if self.config.get("js_runtime_install_skipped", False):
+            return
+
+        self.queue_notice(
+            "未检测到 JS 运行时，YouTube 解密会退回不稳定的 Python solver",
+            "安装便携版",
+            lambda: self.start_component_install("jsruntime"),
+            lambda: self.config.set("js_runtime_install_skipped", True),
+            "warn"
+        )
+
     def apply_style(self):
 
         self.setStyleSheet(
@@ -5721,6 +7212,62 @@ class MainWindow(QMainWindow):
             QLabel#hint {
                 color: #6c7086;
                 font-size: 11px;
+            }
+
+            /* ---------- 顶部通知条 ---------- */
+
+            QFrame#noticeBar {
+                background: rgba(137, 180, 250, 0.12);
+                border: 1px solid #89b4fa;
+                border-radius: 8px;
+            }
+
+            QFrame#noticeBar[kind="warn"] {
+                background: rgba(249, 226, 175, 0.12);
+                border-color: #f9e2af;
+            }
+
+            QFrame#noticeBar[kind="ok"] {
+                background: rgba(166, 227, 161, 0.12);
+                border-color: #a6e3a1;
+            }
+
+            QLabel#noticeText {
+                color: #cdd6f4;
+                font-size: 12px;
+            }
+
+            QPushButton#noticeAction {
+                background: #89b4fa;
+                border: none;
+                border-radius: 6px;
+                color: #1e1e2e;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 4px 14px;
+                min-height: 24px;
+            }
+
+            QPushButton#noticeAction:hover {
+                background: #a6c8ff;
+            }
+
+            QPushButton#noticeAction:disabled {
+                background: #45475a;
+                color: #7f849c;
+            }
+
+            QPushButton#noticeClose {
+                background: transparent;
+                border: none;
+                color: #a6adc8;
+                font-size: 13px;
+                padding: 2px;
+                min-height: 24px;
+            }
+
+            QPushButton#noticeClose:hover {
+                color: #f38ba8;
             }
 
             /* ---------- 容器 ---------- */
@@ -6155,6 +7702,10 @@ class MainWindow(QMainWindow):
             300
         )
 
+        self.save_timer.timeout.connect(
+            self.auto_save_settings
+        )
+
         self.link_list.urls_changed.connect(
             self.schedule_save
         )
@@ -6173,10 +7724,62 @@ class MainWindow(QMainWindow):
 
     def schedule_save(self):
 
-        if self._restoring:
+        if getattr(self, "_restoring", True):
+            return
+
+        if not hasattr(self, "save_timer"):
             return
 
         self.save_timer.start()
+
+    def moveEvent(self, event):
+
+        super().moveEvent(event)
+
+        # 拖动窗口后延迟落盘，避免异常退出丢失位置
+        self.schedule_save()
+
+    def resizeEvent(self, event):
+
+        super().resizeEvent(event)
+
+        self.schedule_save()
+
+    def _current_window_geometry(self):
+        """采集用于下次还原的窗口几何。
+
+        - 位置取 frameGeometry()：move() 定位的是窗口框架左上角，
+          若存回 x()/y()（客户区坐标），每次重启窗口都会向下偏移一个标题栏高度。
+        - 最大化时存 normalGeometry()，还原后取消最大化才能回到合理大小。
+        """
+
+        maximized = (
+            self.isMaximized()
+            or
+            self.isFullScreen()
+        )
+
+        if maximized:
+
+            geo = self.normalGeometry()
+
+            return {
+                "x": geo.x(),
+                "y": geo.y(),
+                "width": geo.width(),
+                "height": geo.height(),
+                "maximized": True
+            }
+
+        frame = self.frameGeometry()
+
+        return {
+            "x": frame.x(),
+            "y": frame.y(),
+            "width": self.width(),
+            "height": self.height(),
+            "maximized": False
+        }
 
     def auto_save_settings(self):
 
@@ -6217,12 +7820,9 @@ class MainWindow(QMainWindow):
                 getattr(self, "auto_download_paused", False)
             )
 
-            data["window"] = {
-                "x": self.x(),
-                "y": self.y(),
-                "width": self.width(),
-                "height": self.height()
-            }
+            data["window"] = (
+                self._current_window_geometry()
+            )
 
             self.config.save()
 
@@ -6245,13 +7845,14 @@ class MainWindow(QMainWindow):
             token = secrets.token_urlsafe(24)
             self.config.set("bridge_token", token)
 
-        port = self.config.get("bridge_port", 47720)
+        port = self.config.get("bridge_port", BRIDGE_DEFAULT_PORT)
 
         # 连接线程安全信号
         self.bridge_log_signal.connect(self._on_bridge_log)
         self.bridge_url_signal.connect(self._on_bridge_url)
         self.bridge_cookies_signal.connect(self._on_bridge_cookies)
         self.bridge_ua_signal.connect(self._on_bridge_ua)
+        self.bridge_activate_signal.connect(self._on_bridge_activate)
 
         self.bridge = OmniGetBridge(
             token=token,
@@ -6260,7 +7861,8 @@ class MainWindow(QMainWindow):
             log_callback=lambda msg: self.bridge_log_signal.emit(msg),
             url_callback=lambda url: self.bridge_url_signal.emit(url),
             cookies_callback=lambda c, u, s: self.bridge_cookies_signal.emit(c, u, s),
-            ua_callback=lambda ua: self.bridge_ua_signal.emit(ua)
+            ua_callback=lambda ua: self.bridge_ua_signal.emit(ua),
+            activate_callback=lambda: self.bridge_activate_signal.emit()
         )
 
         self.bridge.start()
@@ -6350,6 +7952,59 @@ class MainWindow(QMainWindow):
     def _on_bridge_ua(self, ua):
         """桥接收到 UA（主线程）"""
         self.on_bridge_ua_received(ua)
+
+    def _on_bridge_activate(self):
+        """扩展勾选「下载时打开应用」：把主窗口拉到前台（主线程）"""
+        self.log("[Bridge] 收到「下载时打开应用」请求，正在唤醒窗口")
+        try:
+            if self.isMinimized() or not self.isVisible():
+                self.showNormal()
+            self.setWindowState(
+                (self.windowState() & ~Qt.WindowMinimized) | Qt.WindowActive
+            )
+            self.raise_()
+            self.activateWindow()
+
+            # Windows 有前台锁：非前台进程调用 SetForegroundWindow（activateWindow
+            # 底层就是它）会被系统拒绝，只闪任务栏图标。需要先把自己的线程附加到
+            # 当前前台线程的输入队列，借用它的“同意”才能真正抢到焦点。
+            if sys.platform == "win32":
+                self._force_foreground_windows()
+        except Exception as e:
+            print(f"[Bridge] 窗口激活失败：{e}", flush=True)
+
+    def _force_foreground_windows(self):
+        """Windows 专用：绕过前台锁，把窗口真正切到最前"""
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        hwnd = int(self.winId())
+
+        SW_RESTORE = 9
+        fg_hwnd = user32.GetForegroundWindow()
+        fg_tid = user32.GetWindowThreadProcessId(fg_hwnd, None) if fg_hwnd else 0
+        cur_tid = kernel32.GetCurrentThreadId()
+
+        attached = False
+        try:
+            if fg_tid and fg_tid != cur_tid:
+                attached = bool(user32.AttachThreadInput(fg_tid, cur_tid, True))
+
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+
+            # SwitchToThisWindow 不受前台锁限制，作为最后兜底
+            if user32.GetForegroundWindow() != hwnd:
+                try:
+                    user32.SwitchToThisWindow(hwnd, True)
+                except Exception:
+                    pass
+        finally:
+            if attached:
+                user32.AttachThreadInput(fg_tid, cur_tid, False)
 
     def on_auto_pause_changed(self, checked):
         """勾选/取消「暂停自动下载」：只控制队列调度，不触碰当前任务"""
@@ -6753,6 +8408,10 @@ class MainWindow(QMainWindow):
         # 启动环境检查：ffmpeg -encoders 与 yt-dlp --version 都要拉起子进程，
         # 合计 1-5 秒。放后台线程执行，窗口先出来，结果到了再补进日志。
         self.env_ready_signal.connect(self._on_env_ready)
+        self.ytdlp_update_signal.connect(self._on_ytdlp_update_checked)
+        self.ytdlp_updated_signal.connect(self._on_ytdlp_updated)
+        self.component_installed_signal.connect(self._on_component_installed)
+        self.worker_log_signal.connect(self.log)
 
         self.log("")
         self.log("环境检查：正在后台检测（不阻塞界面）…")
@@ -6773,7 +8432,7 @@ class MainWindow(QMainWindow):
 
         self.log(
             f"yt-dlp："
-            f"{'正常' if check_file(YTDLP_EXE) else '未找到'}"
+            f"{'正常' if check_file(YTDLP_EXE) else '未找到（自检后会自动下载最新版）'}"
         )
 
         self.log(
@@ -6824,7 +8483,11 @@ class MainWindow(QMainWindow):
         self.log("ENVIRONMENT CHECK")
         self.log("=" * 30)
         for name, status in env_rows:
-            self.log(f"{name:<10}: {status}")
+            # 状态为空的行是分组标题（【必需组件】等），原样输出
+            if status:
+                self.log(f"{name:<10}: {status}")
+            else:
+                self.log(name)
         self.log("=" * 30)
         self.log("")
 
@@ -6832,9 +8495,11 @@ class MainWindow(QMainWindow):
         self.log(f"[YT-DLP] path={YTDLP_EXE}")
         self.log(f"[YT-DLP] version={ytdlp_version}")
         if YTDLP_UPDATE_CHECK:
-            self.log("[YT-DLP] update_check=已开启（24 小时间隔，后台进行，失败不影响使用）")
+            self.log("[YT-DLP] update_check=已开启（每天第一次启动查一次，"
+                     "发现新版本只提示不自动替换）")
         else:
-            self.log("[YT-DLP] update_check=已关闭（需要时在运行目录建 ytdlp_update.txt 后重启）")
+            self.log("[YT-DLP] update_check=已关闭（删除运行目录的 "
+                     "ytdlp_noupdate.txt 后重启可恢复）")
 
         task_debug_section("YT-DLP", [
             ("path", str(YTDLP_EXE)),
@@ -6843,8 +8508,16 @@ class MainWindow(QMainWindow):
         ])
         task_debug_section("ENVIRONMENT CHECK", env_rows)
 
-        # 版本检查/更新（默认关闭；开启时也是后台线程，失败保留当前版本）
-        check_ytdlp_update_async()
+        # 必需组件缺失：启动自检后按顺序自动下载补齐（通知条显示进度与结果）
+        pending = missing_required_installers()
+
+        # 推荐组件：JS 运行时缺失时给出一键安装提示条（排在自动安装提示后面）
+        self._check_js_runtime_notice()
+
+        if pending:
+            self.start_auto_install(pending)
+        else:
+            self._start_daily_update_check()
 
     def update_count(self):
 
@@ -7616,6 +9289,9 @@ class MainWindow(QMainWindow):
             self._stat_total, self._stat_new,
             self._stat_skipped, self._stat_failed
         )
+
+        # 进入空闲：补弹之前挂起的提示（如 yt-dlp 新版本）
+        self.flush_pending_notice()
 
         # 手动停止：不自动继续
         if self._stopped_by_user:

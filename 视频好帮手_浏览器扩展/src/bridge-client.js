@@ -7,7 +7,7 @@
 // the extension's options page.
 //
 // Lookup contract:
-//   - The user copies `endpoint` (e.g. http://127.0.0.1:47720) and `token`
+//   - The user copies `endpoint` (e.g. http://127.0.0.1:5999) and `token`
 //     from the 视频好帮手 Settings UI into the extension's Options page.
 //   - chrome.storage.local stores them under the keys below.
 //   - If either value is missing the bridge is considered "unpaired" and the
@@ -15,17 +15,27 @@
 
 export const STORAGE_KEY_ENDPOINT = "bridge_endpoint";
 export const STORAGE_KEY_TOKEN = "bridge_token";
+// 端点迁移标记。默认端口从 47720 段改成 5999 段后，浏览器存储里仍然留着
+// 旧地址，而存储值优先于 DEFAULT_ENDPOINT，所以必须主动清一次。
+const STORAGE_KEY_ENDPOINT_MIGRATED = "bridge_endpoint_migration";
+const ENDPOINT_MIGRATION_ID = "port-5999";
+// 历史默认端口。只清这些，用户自己填的非默认端口不动。
+const LEGACY_DEFAULT_PORTS = new Set([
+  "47720", "47721", "47722", "47723", "47724",
+  "47725", "47726", "47727", "47728", "47729",
+  "59999",
+]);
 // Name of the low-frequency autopair alarm owned by background.js. Exported
 // so the 401 recovery path below can re-arm it without duplicating the name.
 export const AUTOPAIR_ALARM_NAME = "视频好帮手-autopair";
 const HEALTH_TIMEOUT_MS = 1500;
 const ENQUEUE_TIMEOUT_MS = 8000;
 const PROTOCOL_VERSION = 1;
-const DEFAULT_ENDPOINT = "http://127.0.0.1:47720";
-// Mirrors `PORT_RANGE` in src-tauri/src/local_bridge.rs — kept narrow so the
-// auto-discovery probe is fast.
+const DEFAULT_ENDPOINT = "http://127.0.0.1:5999";
+// 必须与 man.py 的 BRIDGE_PORT_RANGE 保持一致：默认 5999，被占用时
+// 桌面端会依次尝试后面 9 个端口，所以这里探测 5999-6008。
 export const DEFAULT_PORT_RANGE = [
-  47720, 47721, 47722, 47723, 47724, 47725, 47726, 47727, 47728, 47729,
+  5999, 6000, 6001, 6002, 6003, 6004, 6005, 6006, 6007, 6008,
 ];
 
 export function trimEndpoint(value) {
@@ -38,16 +48,45 @@ export function trimEndpoint(value) {
   return trimmed;
 }
 
+// 判断某个端点是否指向历史默认端口。用户手填的自定义端口不在名单里，不会被误清。
+function isLegacyDefaultEndpoint(value) {
+  const trimmed = trimEndpoint(value);
+  if (!trimmed) return false;
+  try {
+    return LEGACY_DEFAULT_PORTS.has(new URL(trimmed).port);
+  } catch {
+    return false;
+  }
+}
+
 export async function loadBridgeConfig({ storage = globalThis.chrome?.storage?.local } = {}) {
   if (!storage?.get) {
     return { endpoint: "", token: "" };
   }
   return new Promise((resolve) => {
-    storage.get([STORAGE_KEY_ENDPOINT, STORAGE_KEY_TOKEN], (items) => {
-      const endpoint = trimEndpoint(items?.[STORAGE_KEY_ENDPOINT]) || DEFAULT_ENDPOINT;
-      const token = typeof items?.[STORAGE_KEY_TOKEN] === "string" ? items[STORAGE_KEY_TOKEN].trim() : "";
-      resolve({ endpoint, token });
-    });
+    storage.get(
+      [STORAGE_KEY_ENDPOINT, STORAGE_KEY_TOKEN, STORAGE_KEY_ENDPOINT_MIGRATED],
+      (items) => {
+        let stored = trimEndpoint(items?.[STORAGE_KEY_ENDPOINT]);
+        const token =
+          typeof items?.[STORAGE_KEY_TOKEN] === "string" ? items[STORAGE_KEY_TOKEN].trim() : "";
+
+        // 一次性迁移：存储里留着旧默认端口时清掉，让 DEFAULT_ENDPOINT 生效。
+        // 否则旧地址会一直盖住新默认值，扩展始终连不上桌面端。
+        const migrated = items?.[STORAGE_KEY_ENDPOINT_MIGRATED];
+        if (migrated !== ENDPOINT_MIGRATION_ID) {
+          if (isLegacyDefaultEndpoint(stored)) stored = "";
+          try {
+            storage.set({
+              [STORAGE_KEY_ENDPOINT]: stored,
+              [STORAGE_KEY_ENDPOINT_MIGRATED]: ENDPOINT_MIGRATION_ID,
+            });
+          } catch {}
+        }
+
+        resolve({ endpoint: stored || DEFAULT_ENDPOINT, token });
+      }
+    );
   });
 }
 
@@ -61,6 +100,8 @@ export async function saveBridgeConfig(
       {
         [STORAGE_KEY_ENDPOINT]: trimEndpoint(endpoint),
         [STORAGE_KEY_TOKEN]: typeof token === "string" ? token.trim() : "",
+        // 用户显式保存过的地址就是最终答案，打上标记避免之后被迁移逻辑清掉
+        [STORAGE_KEY_ENDPOINT_MIGRATED]: ENDPOINT_MIGRATION_ID,
       },
       () => resolve(true)
     );
@@ -102,7 +143,7 @@ function withTimeout(promise, ms, controller) {
       try {
         controller?.abort();
       } catch {}
-      reject(new Error(`bridge timed out after ${ms}ms`));
+      reject(new Error(`连接本地客户端超时（${ms}ms）`));
     }, ms);
     promise.then(
       (value) => {
@@ -272,7 +313,7 @@ export async function sendViaBridge(
       ok: false,
       reason: "unauthorized",
       status: response.status,
-      message: parsed?.message ?? "Bridge rejected the bearer token",
+      message: parsed?.message ?? "本地客户端拒绝了配对令牌",
     };
   }
   if (!response.ok) {
@@ -365,7 +406,7 @@ export async function sendCookiesViaBridge(
       ok: false,
       reason: "unauthorized",
       status: response.status,
-      message: parsed?.message ?? "Bridge rejected the bearer token",
+      message: parsed?.message ?? "本地客户端拒绝了配对令牌",
     };
   }
   if (!response.ok) {

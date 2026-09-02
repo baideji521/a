@@ -1,22 +1,22 @@
 const ERROR_PAGE_MESSAGES = Object.freeze({
-  error_page_document_title: "视频好帮手 Extension",
-  error_page_eyebrow: "视频好帮手 Extension",
-  error_page_install_cta: "Install 视频好帮手",
-  error_page_open_extensions: "Open extension settings",
-  error_host_missing_title: "Open 视频好帮手 once to finish setup",
-  error_host_missing_body: "Your browser could not find the 视频好帮手 bridge on this computer yet.",
+  error_page_document_title: "视频好帮手 扩展",
+  error_page_eyebrow: "视频好帮手 扩展",
+  error_page_install_cta: "安装视频批量下载工具",
+  error_page_open_extensions: "打开扩展设置",
+  error_host_missing_title: "请先启动一次视频批量下载工具以完成设置",
+  error_host_missing_body: "浏览器还没有在这台电脑上找到视频批量下载工具的本地连接。",
   error_host_missing_detail:
-    "Install 视频好帮手 if needed, then launch the desktop app once and click the extension again.",
-  error_invalid_url_title: "This page URL cannot be sent to 视频好帮手",
+    "如果尚未安装，请先安装视频批量下载工具；已安装的话启动一次桌面程序，然后重新点击扩展。",
+  error_invalid_url_title: "当前页面地址无法发送给视频批量下载工具",
   error_invalid_url_body:
-    "The current page is not a supported media page for the 视频好帮手 extension.",
+    "当前页面不是视频好帮手扩展支持的媒体页面。",
   error_invalid_url_detail:
-    "Try again from a direct video, reel, post, playlist, or course page.",
-  error_launch_failed_title: "视频好帮手 could not be launched from your browser",
+    "请在具体的视频、Reel、帖子、播放列表或课程页面上重试。",
+  error_launch_failed_title: "无法从浏览器启动视频批量下载工具",
   error_launch_failed_body:
-    "The extension talked to the native host, but the desktop app did not start correctly.",
+    "扩展已经和本地程序通上了，但桌面端没有正常启动。",
   error_launch_failed_detail:
-    "Check that 视频好帮手 is installed and not blocked by your system, then try again.",
+    "请确认视频批量下载工具已安装且没有被系统拦截，然后重试。",
 });
 
 const ERROR_CODES = Object.freeze({
