@@ -1,0 +1,342 @@
+Video: 202609011036_tiktok_7538192551195594014.mp4
+Duration: 71.67s
+5 visual events, 53 speech segments
+This file has 4 sections: 1 interleaved timeline | 2 action track | 3 expression track | 4 word-by-word timeline
+Timing authority = SECTION 4. Emotion authority = SECTION 3 (face model). The emotion on Speech lines is audio-based: reference only.
+All timestamps are absolute seconds from the start of the video (decimal seconds, NOT mm:ss), between 0 and the Duration above. Copy them verbatim; never convert them.
+
+============================================================
+SECTION 1 - Interleaved timeline (visual events + speech, sorted by time)
+Row: [start - end] Visual (expression score) [importance]: description
+Row:     On-screen text: ... (indented, belongs to the Visual row above)
+Row: [start - end] Speech (speaker N) (audio emotion score, reference only; omitted when the score is below 0.30): text
+============================================================
+
+[0.00 - 2.40] Speech: This filter is going to tell us when we're going to get divorced.
+[0.00 - 12.00] Visual (happy 0.65) [normal]: man and woman react to text overlay
+    On-screen text: When will we get divorced? ???? 2025 2030
+[3.24 - 3.56] Speech (disgusted 0.79): What?
+[3.76 - 5.64] Speech: We haven't even gotten married and you're planning for divorce?
+[5.84 - 6.56] Speech (neutral 0.37): I just want to see.
+[8.28 - 8.74] Speech: Come on.
+[10.42 - 10.74] Speech (fearful 1.00): No!
+[10.92 - 11.24] Speech (happy 1.00): No!
+[11.30 - 12.08] Speech (sad 0.70): That has to be a glitch.
+[12.00 - 24.00] Visual (happy 0.67) [high]: text changes from 2023 to 2039
+    On-screen text: When will will get divorced? 2023
+[12.16 - 13.92] Speech (angry 0.79): There's no way we're only going to be married for a couple years.
+[14.98 - 15.60] Speech: Watch this.
+[16.10 - 17.12] Speech: This is the true one.
+[17.24 - 17.78] Speech (neutral 0.66): Are you sure?
+[18.02 - 18.30] Speech: Yes.
+[18.44 - 19.14] Speech (neutral 0.35): Alright, let's see.
+[19.16 - 19.74] Speech (happy 1.00): Yeah, yeah, yeah.
+[19.78 - 20.34] Speech (happy 0.96): Keep doing flips.
+[20.46 - 20.98] Speech (happy 0.70): Keep bouncing.
+[21.06 - 21.86] Speech (happy 1.00): Do all that.
+[22.32 - 23.28] Speech: Except going in.
+[23.38 - 23.86] Speech (neutral 0.53): Keep going.
+[24.00 - 48.00] Visual (happy 0.77) [high]: woman speaks with text overlay showing year progression
+    On-screen text: When will we get divorced? 2034
+[24.10 - 24.74] Speech (happy 0.93): It's about to go in.
+[24.76 - 26.10] Speech (happy 1.00): No, no, no, no, no, no, no.
+[26.10 - 26.82] Speech (angry 0.84): It's literally about to slide in.
+[26.82 - 27.38] Speech (surprised 0.92): No, it's not.
+[27.48 - 28.50] Speech: It's going to keep bouncing.
+[28.54 - 29.56] Speech (happy 0.81): Come on, come on.
+[30.42 - 31.08] Speech: Come on.
+[31.91 - 32.37] Speech (happy 0.89): Damn, okay.
+[32.81 - 33.57] Speech (surprised 0.83): Oh my god, okay.
+[33.57 - 34.59] Speech (happy 0.85): This is definitely better.
+[34.63 - 35.41] Speech: Maybe it was glitched.
+[35.47 - 35.75] Speech: I don't know.
+[36.27 - 36.59] Speech: Okay.
+[37.31 - 37.83] Speech (sad 0.63): Okay, okay.
+[38.19 - 39.21] Speech (surprised 1.00): Wait, it's slowing down.
+[39.33 - 39.97] Speech (neutral 0.31): It's slowing down.
+[40.17 - 40.47] Speech (surprised 0.95): Oh no.
+[41.34 - 41.80] Speech (surprised 1.00): Don't go in.
+[41.86 - 42.26] Speech (surprised 0.99): Don't go in.
+[42.28 - 42.72] Speech (angry 0.97): Don't go in.
+[43.86 - 44.48] Speech (happy 0.96): Please stop.
+[45.90 - 46.44] Speech (neutral 0.61): No way.
+[46.92 - 47.48] Speech (happy 0.98): Bro, what?
+[48.00 - 58.70] Visual (sad 0.72) [high]: text changes from 2073 to 2071
+    On-screen text: When will will get divorced? 2073
+[48.58 - 49.50] Speech: I guess we're going to...
+[51.84 - 52.16] Speech (surprised 1.00): Okay.
+[54.18 - 55.52] Speech (happy 0.99): Dude, this thing is going forever.
+[57.48 - 58.90] Speech (happy 1.00): Yeah, maybe this is too much.
+[59.47 - 60.89] Speech (surprised 0.98): You don't want to be married to me now?
+[60.00 - 71.63] Visual (happy 0.63) [high]: woman reacts to changing year text on screen
+    On-screen text: When will we get divorced? 2083
+[60.97 - 63.95] Speech (happy 0.65): No, I do, but we're going to be like really old.
+[65.78 - 67.22] Speech (sad 0.77): There's no way it hits...
+[67.79 - 68.11] Speech (surprised 1.00): Oh!
+[68.41 - 68.73] Speech (surprised 1.00): Oh!
+[70.03 - 70.55] Speech (neutral 0.37): Yes, yes.
+
+============================================================
+SECTION 2 - Action track (one timestamp per action, event granularity)
+Row: [start - end]: action @ scene
+============================================================
+
+[0.00 - 12.00]: reacting @ indoor_room
+[12.00 - 24.00]: text_change @ indoor
+[24.00 - 48.00]: speaking @ indoor
+[48.00 - 58.70]: text_change @ indoor
+[60.00 - 71.63]: reacting @ indoor
+
+============================================================
+SECTION 3 - Expression track (one timestamp per expression, face model @2fps)
+Row: [start - end]: expression confidence(0-1) - decisive emotional evidence; the number is how sure the face model is about the label, NOT how strong the expression is; largest face on screen only
+============================================================
+
+[0.50 - 3.50]: surprised 0.55
+[4.50 - 5.00]: surprised 0.48
+[6.00 - 7.00]: happy 0.69
+--- 2.00s with no face detected (this is NOT neutral) ---
+[9.00 - 11.00]: sad 0.45
+[11.50 - 12.00]: happy 0.67
+--- 2.00s with no face detected (this is NOT neutral) ---
+[14.00 - 15.00]: neutral 0.60
+--- 2.00s with no face detected (this is NOT neutral) ---
+[17.00 - 17.50]: neutral 0.58
+[18.00 - 24.00]: happy 0.69
+[25.00 - 26.00]: disgusted 0.41
+--- 2.50s with no face detected (this is NOT neutral) ---
+[28.50 - 30.00]: neutral 0.42
+[30.50 - 38.00]: happy 0.85
+[38.50 - 39.00]: neutral 0.41
+--- 2.00s with no face detected (this is NOT neutral) ---
+[41.00 - 41.50]: happy 0.41
+[42.50 - 49.00]: sad 0.80
+[49.50 - 50.50]: happy 0.70
+[51.00 - 55.00]: sad 0.75
+--- 1.50s with no face detected (this is NOT neutral) ---
+[56.50 - 61.00]: happy 0.79
+[62.00 - 62.50]: neutral 0.40
+--- 1.50s with no face detected (this is NOT neutral) ---
+[64.00 - 65.50]: surprised 0.61
+[66.00 - 68.00]: neutral 0.51
+[69.00 - 69.50]: fearful 0.63
+--- 1.50s with no face detected (this is NOT neutral) ---
+[71.00 - 71.50]: happy 0.58
+
+============================================================
+SECTION 4 - Word-by-word timeline (one timestamp per word, source language)
+Words: 205
+Row: [start - end] word - clip.start / clip.end must come from here
+============================================================
+
+[0.00 - 0.06] This
+[0.06 - 0.42] filter
+[0.42 - 0.54] is
+[0.54 - 0.62] going
+[0.62 - 0.72] to
+[0.72 - 0.92] tell
+[0.92 - 1.10] us
+[1.10 - 1.34] when
+[1.34 - 1.54] we're
+[1.54 - 1.58] going
+[1.58 - 1.70] to
+[1.70 - 1.82] get
+[1.82 - 2.40] divorced.
+[3.24 - 3.56] What?
+[3.76 - 4.00] We
+[4.00 - 4.24] haven't
+[4.24 - 4.32] even
+[4.32 - 4.50] gotten
+[4.50 - 4.78] married
+[4.78 - 4.92] and
+[4.92 - 5.04] you're
+[5.04 - 5.18] planning
+[5.18 - 5.32] for
+[5.32 - 5.64] divorce?
+[5.84 - 5.92] I
+[5.92 - 6.06] just
+[6.06 - 6.22] want
+[6.22 - 6.36] to
+[6.36 - 6.56] see.
+--- 1.72s with no speech ---
+[8.28 - 8.60] Come
+[8.60 - 8.74] on.
+--- 1.68s with no speech ---
+[10.42 - 10.74] No!
+[10.92 - 11.24] No!
+[11.30 - 11.52] That
+[11.52 - 11.68] has
+[11.68 - 11.80] to
+[11.80 - 11.88] be
+[11.88 - 11.96] a
+[11.96 - 12.08] glitch.
+[12.16 - 12.32] There's
+[12.32 - 12.40] no
+[12.40 - 12.56] way
+[12.56 - 12.68] we're
+[12.68 - 12.82] only
+[12.82 - 12.92] going
+[12.92 - 13.00] to
+[13.00 - 13.10] be
+[13.10 - 13.32] married
+[13.32 - 13.42] for
+[13.42 - 13.54] a
+[13.54 - 13.72] couple
+[13.72 - 13.92] years.
+[14.98 - 15.30] Watch
+[15.30 - 15.60] this.
+[16.10 - 16.42] This
+[16.42 - 16.60] is
+[16.60 - 16.70] the
+[16.70 - 16.90] true
+[16.90 - 17.12] one.
+[17.24 - 17.38] Are
+[17.38 - 17.46] you
+[17.46 - 17.78] sure?
+[18.02 - 18.30] Yes.
+[18.44 - 18.72] Alright,
+[18.82 - 19.14] let's
+[19.14 - 19.14] see.
+[19.16 - 19.30] Yeah,
+[19.30 - 19.50] yeah,
+[19.54 - 19.74] yeah.
+[19.78 - 19.90] Keep
+[19.90 - 20.10] doing
+[20.10 - 20.34] flips.
+[20.46 - 20.64] Keep
+[20.64 - 20.98] bouncing.
+[21.06 - 21.36] Do
+[21.36 - 21.54] all
+[21.54 - 21.86] that.
+[22.32 - 22.64] Except
+[22.64 - 22.96] going
+[22.96 - 23.28] in.
+[23.38 - 23.54] Keep
+[23.54 - 23.86] going.
+[24.10 - 24.28] It's
+[24.28 - 24.36] about
+[24.36 - 24.48] to
+[24.48 - 24.58] go
+[24.58 - 24.74] in.
+[24.76 - 25.02] No,
+[25.04 - 25.08] no,
+[25.16 - 25.26] no,
+[25.36 - 25.54] no,
+[25.62 - 25.70] no,
+[25.70 - 25.96] no,
+[25.96 - 26.10] no.
+[26.10 - 26.12] It's
+[26.12 - 26.16] literally
+[26.16 - 26.48] about
+[26.48 - 26.60] to
+[26.60 - 26.80] slide
+[26.80 - 26.82] in.
+[26.82 - 27.04] No,
+[27.10 - 27.20] it's
+[27.20 - 27.38] not.
+[27.48 - 27.80] It's
+[27.80 - 27.88] going
+[27.88 - 28.02] to
+[28.02 - 28.16] keep
+[28.16 - 28.50] bouncing.
+[28.54 - 28.84] Come
+[28.84 - 29.12] on,
+[29.12 - 29.26] come
+[29.26 - 29.56] on.
+[30.42 - 30.74] Come
+[30.74 - 31.08] on.
+[31.91 - 32.23] Damn,
+[32.25 - 32.37] okay.
+[32.81 - 33.13] Oh
+[33.13 - 33.13] my
+[33.13 - 33.13] god,
+[33.15 - 33.57] okay.
+[33.57 - 33.85] This
+[33.85 - 33.87] is
+[33.87 - 34.15] definitely
+[34.15 - 34.59] better.
+[34.63 - 34.79] Maybe
+[34.79 - 34.93] it
+[34.93 - 35.09] was
+[35.09 - 35.41] glitched.
+[35.47 - 35.53] I
+[35.53 - 35.61] don't
+[35.61 - 35.75] know.
+[36.27 - 36.59] Okay.
+[37.31 - 37.63] Okay,
+[37.63 - 37.83] okay.
+[38.19 - 38.51] Wait,
+[38.59 - 38.71] it's
+[38.71 - 38.91] slowing
+[38.91 - 39.21] down.
+[39.33 - 39.49] It's
+[39.49 - 39.69] slowing
+[39.69 - 39.97] down.
+[40.17 - 40.27] Oh
+[40.27 - 40.47] no.
+[41.34 - 41.66] Don't
+[41.66 - 41.68] go
+[41.68 - 41.80] in.
+[41.86 - 42.00] Don't
+[42.00 - 42.14] go
+[42.14 - 42.26] in.
+[42.28 - 42.42] Don't
+[42.42 - 42.50] go
+[42.50 - 42.72] in.
+[43.86 - 44.18] Please
+[44.18 - 44.48] stop.
+[45.90 - 46.22] No
+[46.22 - 46.44] way.
+[46.92 - 47.24] Bro,
+[47.24 - 47.48] what?
+[48.58 - 48.90] I
+[48.90 - 49.06] guess
+[49.06 - 49.24] we're
+[49.24 - 49.24] going
+[49.24 - 49.50] to...
+--- 2.34s with no speech ---
+[51.84 - 52.16] Okay.
+--- 2.02s with no speech ---
+[54.18 - 54.50] Dude,
+[54.56 - 54.68] this
+[54.68 - 54.82] thing
+[54.82 - 54.94] is
+[54.94 - 55.10] going
+[55.10 - 55.52] forever.
+--- 1.96s with no speech ---
+[57.48 - 57.80] Yeah,
+[57.82 - 57.96] maybe
+[57.96 - 58.18] this
+[58.18 - 58.28] is
+[58.28 - 58.44] too
+[58.44 - 58.90] much.
+[59.47 - 59.79] You
+[59.79 - 59.95] don't
+[59.95 - 59.99] want
+[59.99 - 60.11] to
+[60.11 - 60.19] be
+[60.19 - 60.47] married
+[60.47 - 60.61] to
+[60.61 - 60.71] me
+[60.71 - 60.89] now?
+[60.97 - 61.19] No,
+[61.19 - 61.31] I
+[61.31 - 61.61] do,
+[61.73 - 62.05] but
+[62.05 - 62.77] we're
+[62.77 - 62.79] going
+[62.79 - 62.87] to
+[62.87 - 63.01] be
+[63.01 - 63.17] like
+[63.17 - 63.59] really
+[63.59 - 63.95] old.
+--- 1.83s with no speech ---
+[65.78 - 66.10] There's
+[66.10 - 66.20] no
+[66.20 - 66.54] way
+[66.54 - 66.70] it
+[66.70 - 67.22] hits...
+[67.79 - 68.11] Oh!
+[68.41 - 68.73] Oh!
+[70.03 - 70.35] Yes,
+[70.39 - 70.55] yes.

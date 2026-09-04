@@ -1,0 +1,218 @@
+Video: 202609011045_tiktok_7486875390712073502.mp4
+Duration: 60.81s
+1 visual events, 30 speech segments
+This file has 4 sections: 1 interleaved timeline | 2 action track | 3 expression track | 4 word-by-word timeline
+Timing authority = SECTION 4. Emotion authority = SECTION 3 (face model). The emotion on Speech lines is audio-based: reference only.
+All timestamps are absolute seconds from the start of the video (decimal seconds, NOT mm:ss), between 0 and the Duration above. Copy them verbatim; never convert them.
+
+============================================================
+SECTION 1 - Interleaved timeline (visual events + speech, sorted by time)
+Row: [start - end] Visual (expression score) [importance]: description
+Row:     On-screen text: ... (indented, belongs to the Visual row above)
+Row: [start - end] Speech (speaker N) (audio emotion score, reference only; omitted when the score is below 0.30): text
+============================================================
+
+[0.00 - 4.66] Speech: So, this filter is supposed to tell you when you become a billionaire with 100% accuracy.
+[0.00 - 60.77] Visual (neutral 0.40) [high]: text changes from 'when will you become a billionaire' to 'you will become a billionaire in 2035'
+    On-screen text: When will you become a billionaire? 2035
+[4.96 - 6.38] Speech: Alright, let's just go about it.
+[6.54 - 8.97] Speech: Here we go, baby.
+[9.19 - 10.63] Speech (surprised 1.00): Oh, oh, come on!
+[10.99 - 12.63] Speech (surprised 1.00): Oh my gosh, it was right there!
+[12.89 - 14.09] Speech (sad 1.00): It was right there!
+[15.54 - 16.02] Speech (neutral 0.31): 2038?
+[16.34 - 17.54] Speech (surprised 1.00): Oh my gosh.
+[17.92 - 19.80] Speech (neutral 0.64): Come on.
+[19.92 - 21.45] Speech: At least before 2050.
+[21.79 - 22.93] Speech: At least before 2050.
+[23.25 - 25.63] Speech: You're joking, right?
+[25.95 - 26.85] Speech (angry 0.99): You're joking.
+[27.11 - 31.83] Speech: They're teasing me every single time.
+[32.60 - 33.52] Speech (surprised 1.00): Oh my god.
+[33.62 - 34.46] Speech (sad 0.99): Just go down!
+[34.76 - 35.66] Speech (sad 1.00): Just go down!
+[36.10 - 38.53] Speech: I don't think it's possible.
+[38.53 - 40.71] Speech: Is it even possible to get under this hole?
+[42.48 - 44.58] Speech: It's not possible to get into the hole.
+[44.74 - 47.46] Speech: I do not think anyone can do this.
+[48.55 - 49.01] Speech (neutral 0.41): 2087?
+[49.39 - 51.04] Speech: Oh my gosh.
+[51.34 - 53.72] Speech: Give me at least before 2100.
+[53.86 - 54.50] Speech (neutral 0.52): At least.
+[54.64 - 55.16] Speech: Come on.
+[55.18 - 56.31] Speech (neutral 0.42): Come on.
+[56.35 - 58.52] Speech: You're joking.
+[58.76 - 59.52] Speech (neutral 0.37): You're joking.
+[59.60 - 60.38] Speech (happy 0.94): This is rigged.
+
+============================================================
+SECTION 2 - Action track (one timestamp per action, event granularity)
+Row: [start - end]: action @ scene
+============================================================
+
+[0.00 - 60.77]: text_animation @ indoor_room
+
+============================================================
+SECTION 3 - Expression track (one timestamp per expression, face model @2fps)
+Row: [start - end]: expression confidence(0-1) - decisive emotional evidence; the number is how sure the face model is about the label, NOT how strong the expression is; largest face on screen only
+============================================================
+
+[1.00 - 2.50]: neutral 0.40
+--- 5.00s with no face detected (this is NOT neutral) ---
+[7.50 - 8.50]: neutral 0.45
+--- 2.00s with no face detected (this is NOT neutral) ---
+[10.50 - 11.00]: happy 0.72
+[12.00 - 13.00]: fearful 0.56
+--- 2.50s with no face detected (this is NOT neutral) ---
+[15.50 - 25.50]: neutral 0.39
+[26.50 - 27.00]: angry 0.44
+--- 2.00s with no face detected (this is NOT neutral) ---
+[29.00 - 29.50]: fearful 0.47
+--- 5.50s with no face detected (this is NOT neutral) ---
+[35.00 - 35.50]: surprised 0.46
+--- 10.00s with no face detected (this is NOT neutral) ---
+[45.50 - 48.00]: fearful 0.55
+[48.50 - 50.00]: neutral 0.43
+[51.00 - 51.50]: fearful 0.46
+--- 2.00s with no face detected (this is NOT neutral) ---
+[53.50 - 60.00]: neutral 0.37
+
+============================================================
+SECTION 4 - Word-by-word timeline (one timestamp per word, source language)
+Words: 129
+Row: [start - end] word - clip.start / clip.end must come from here
+============================================================
+
+[0.00 - 0.14] So,
+[0.14 - 0.26] this
+[0.26 - 0.66] filter
+[0.66 - 0.82] is
+[0.82 - 0.96] supposed
+[0.96 - 1.20] to
+[1.20 - 1.40] tell
+[1.40 - 1.62] you
+[1.62 - 1.86] when
+[1.86 - 2.00] you
+[2.00 - 2.26] become
+[2.26 - 2.48] a
+[2.48 - 2.88] billionaire
+[2.88 - 3.34] with
+[3.34 - 3.60] 100
+[3.60 - 4.14] %
+[4.14 - 4.66] accuracy.
+[4.96 - 5.16] Alright,
+[5.22 - 5.42] let's
+[5.42 - 5.50] just
+[5.50 - 5.96] go
+[5.96 - 6.16] about
+[6.16 - 6.38] it.
+[6.54 - 6.72] Here
+--- 1.81s with no speech ---
+[8.53 - 8.63] we
+[8.63 - 8.77] go,
+[8.83 - 8.97] baby.
+[9.19 - 9.53] Oh,
+[9.55 - 9.99] oh,
+[10.03 - 10.45] come
+[10.45 - 10.63] on!
+[10.99 - 11.47] Oh
+[11.47 - 11.73] my
+[11.73 - 12.01] gosh,
+[12.07 - 12.19] it
+[12.19 - 12.25] was
+[12.25 - 12.39] right
+[12.39 - 12.63] there!
+[12.89 - 13.35] It
+[13.35 - 13.51] was
+[13.51 - 13.79] right
+[13.79 - 14.09] there!
+[15.54 - 16.02] 2038?
+[16.34 - 16.82] Oh
+[16.82 - 17.12] my
+[17.12 - 17.54] gosh.
+[17.92 - 18.38] Come
+[19.64 - 19.80] on.
+[19.92 - 20.34] At
+[20.55 - 20.81] least
+[20.81 - 21.01] before
+[21.01 - 21.45] 2050.
+[21.79 - 22.09] At
+[22.09 - 22.31] least
+[22.31 - 22.55] before
+[22.55 - 22.93] 2050.
+[23.25 - 23.73] You're
+[25.03 - 25.37] joking,
+[25.45 - 25.63] right?
+[25.95 - 26.43] You're
+[26.43 - 26.85] joking.
+[27.11 - 27.59] They're
+--- 2.86s with no speech ---
+[30.45 - 30.79] teasing
+[30.79 - 31.07] me
+[31.07 - 31.31] every
+[31.31 - 31.55] single
+[31.55 - 31.83] time.
+[32.60 - 32.96] Oh
+[32.96 - 33.32] my
+[33.32 - 33.52] god.
+[33.62 - 33.90] Just
+[33.90 - 34.22] go
+[34.22 - 34.46] down!
+[34.76 - 35.22] Just
+[35.22 - 35.38] go
+[35.38 - 35.66] down!
+[36.10 - 36.28] I
+[36.28 - 36.38] don't
+--- 1.61s with no speech ---
+[37.99 - 38.07] think
+[38.07 - 38.21] it's
+[38.21 - 38.53] possible.
+[38.53 - 39.05] Is
+[39.05 - 39.19] it
+[39.19 - 39.37] even
+[39.37 - 39.73] possible
+[39.73 - 39.99] to
+[39.99 - 40.13] get
+[40.13 - 40.29] under
+[40.29 - 40.53] this
+[40.53 - 40.71] hole?
+--- 1.77s with no speech ---
+[42.48 - 42.94] It's
+[42.94 - 43.16] not
+[43.16 - 43.64] possible
+[43.64 - 43.84] to
+[43.84 - 43.94] get
+[43.94 - 44.18] into
+[44.18 - 44.40] the
+[44.40 - 44.58] hole.
+[44.74 - 45.14] I
+[45.54 - 45.70] do
+[45.70 - 45.94] not
+[45.94 - 46.12] think
+[46.12 - 46.72] anyone
+[46.72 - 47.02] can
+[47.02 - 47.18] do
+[47.18 - 47.46] this.
+[48.55 - 49.01] 2087?
+[49.39 - 49.85] Oh
+[50.60 - 50.78] my
+[50.78 - 51.04] gosh.
+[51.34 - 51.80] Give
+[51.80 - 51.96] me
+[51.96 - 52.08] at
+[52.08 - 52.62] least
+[52.62 - 52.84] before
+[52.84 - 53.72] 2100.
+[53.86 - 54.26] At
+[54.26 - 54.50] least.
+[54.64 - 54.90] Come
+[54.90 - 55.16] on.
+[55.18 - 55.60] Come
+[56.13 - 56.31] on.
+[56.35 - 56.71] You're
+[58.20 - 58.52] joking.
+[58.76 - 59.22] You're
+[59.22 - 59.52] joking.
+[59.60 - 59.80] This
+[59.80 - 59.96] is
+[59.96 - 60.38] rigged.
