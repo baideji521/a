@@ -1,0 +1,358 @@
+Video: 202608261928_tiktok_7547624219257900295.mp4
+Duration: 95.10s
+8 visual events, 32 speech segments
+This file has 4 sections: 1 interleaved timeline | 2 action track | 3 expression track | 4 word-by-word timeline
+Timing authority = SECTION 4. Emotion authority = SECTION 3 (face model). The emotion on Speech lines is audio-based: reference only.
+All timestamps are absolute seconds from the start of the video (decimal seconds, NOT mm:ss), between 0 and the Duration above. Copy them verbatim; never convert them.
+
+============================================================
+SECTION 1 - Interleaved timeline (visual events + speech, sorted by time)
+Row: [start - end] Visual (expression score) [importance]: description
+Row:     On-screen text: ... (indented, belongs to the Visual row above)
+Row: [start - end] Speech (speaker N) (audio emotion score, reference only; omitted when the score is below 0.30): text
+============================================================
+
+[0.00 - 1.86] Speech (speaker 1) (happy 0.83): If this is green, I'll dye my hair brunette.
+[0.00 - 36.00] Visual (neutral 0.56) [normal]: man and woman eat chocolate from bags while looking at camera
+    On-screen text: baskin robbins
+[4.61 - 4.97] Speech (speaker 1) (happy 0.94): Yellow.
+[5.25 - 7.33] Speech (speaker 2): If this is pink, I'll tell you a secret I've never told anyone.
+[11.55 - 12.57] Speech (speaker 3) (<unk> 0.42): Wait, now I want to know.
+[12.81 - 14.99] Speech (speaker 3) (happy 1.00): If this is green, we're getting a cockle spaniel next week.
+[17.44 - 17.80] Speech (speaker 3) (surprised 0.71): Yellow.
+[18.00 - 18.22] Speech (speaker 3): Is that green?
+[18.54 - 19.16] Speech (speaker 3) (happy 1.00): That's green.
+[19.34 - 19.70] Speech (speaker 3): That's yellow.
+[19.86 - 20.14] Speech (speaker 3): That's green.
+[20.74 - 23.96] Speech (speaker 3): Okay, if this is green, we're getting takeaway tonight.
+[24.22 - 24.86] Speech (speaker 2) (neutral 0.47): Oh, please be green.
+[25.10 - 25.30] Speech (speaker 2): If
+[29.44 - 31.36] Speech (speaker 2) (happy 1.00): this is pink, we're ordering Thai food, which is what I want.
+[31.54 - 31.98] Speech (speaker 2): Okay, Thai.
+[32.22 - 34.96] Speech (speaker 2): If this is green,
+[35.00 - 36.02] Speech (speaker 2): I'm falling pregnant next year.
+[36.00 - 40.27] Visual (sad 0.58) [normal]: woman eats chocolate chip while man watches
+    On-screen text: MILAN
+[36.12 - 40.26] Speech (speaker 1): Thank God.
+[40.27 - 44.57] Visual (neutral 0.61) [normal]: man gestures with hand while woman looks at camera
+    On-screen text: MILAN
+[40.46 - 42.76] Speech (speaker 2) (<unk> 0.36): If this is yellow, all my dreams come true.
+[43.04 - 47.68] Speech (speaker 2): I was about to say, if this is orange.
+[48.00 - 60.00] Visual (neutral 0.53) [low]: woman holds small candy and gestures while man looks on
+    On-screen text: MILAN
+[48.12 - 50.06] Speech (speaker 2) (neutral 0.41): If this is pink, I'm buying my glasses cut.
+[50.56 - 54.54] Speech (speaker 2): If this is pink, you're buying my glasses cut.
+[57.70 - 60.92] Speech (speaker 1) (happy 1.00): If this is green, you have to pay for my gym membership for the month.
+[60.00 - 65.30] Visual (neutral 0.48) [normal]: man and woman hold candy, woman takes bite, man looks at camera
+    On-screen text: JIM OVALE
+[61.47 - 61.79] Speech (speaker 2) (happy 0.98): Oh.
+[62.53 - 67.98] Speech (speaker 2): If this is green, we have to swap clothes for the day.
+[70.08 - 70.40] Speech (speaker 2): Yellow.
+[70.64 - 72.62] Speech (speaker 2) (neutral 0.32): I need to get my nails done at the end of the week.
+[72.00 - 81.67] Visual (happy 0.57) [normal]: woman eats chocolate while man watches
+    On-screen text: ALIM
+[72.62 - 74.52] Speech (speaker 2): If this is pink, you have to pay for them.
+[74.70 - 80.30] Speech (speaker 2): If this is pink, you have to bring me coffee in bed for the rest of the week every morning.
+[80.48 - 87.02] Speech (speaker 4): If this is pink, you guys have to do whatever I say.
+[81.67 - 85.50] Visual (neutral 0.51) [normal]: woman holds candy and eats it while man watches
+    On-screen text: chocolate chip cookies
+[85.50 - 95.07] Visual (happy 0.86) [normal]: man, woman, and child pose for camera with candy
+    On-screen text: chocolate chip cookies
+[87.48 - 87.80] Speech (speaker 4) (surprised 0.96): Okay.
+[94.18 - 94.50] Speech (speaker 4) (happy 0.98): Sorry.
+
+============================================================
+SECTION 2 - Action track (one timestamp per action, event granularity)
+Row: [start - end]: action @ scene
+============================================================
+
+[0.00 - 36.00]: eating @ indoor_room
+[36.00 - 40.27]: eating @ indoor_room
+[40.27 - 44.57]: gesturing @ indoor_room
+[48.00 - 60.00]: holding @ indoor_room
+[60.00 - 65.30]: eating @ indoor_room
+[72.00 - 81.67]: eating @ indoor_room
+[81.67 - 85.50]: eating @ indoor_room
+[85.50 - 95.07]: posing @ indoor_room
+
+============================================================
+SECTION 3 - Expression track (one timestamp per expression, face model @2fps)
+Row: [start - end]: expression confidence(0-1) - decisive emotional evidence; the number is how sure the face model is about the label, NOT how strong the expression is; largest face on screen only
+============================================================
+
+[2.50 - 5.00]: sad 0.47
+[5.50 - 11.00]: neutral 0.59
+[11.50 - 12.50]: sad 0.65
+--- 3.00s with no face detected (this is NOT neutral) ---
+[15.50 - 16.00]: sad 0.47
+--- 1.50s with no face detected (this is NOT neutral) ---
+[17.50 - 20.00]: sad 0.81
+--- 2.00s with no face detected (this is NOT neutral) ---
+[22.00 - 24.00]: neutral 0.66
+[25.00 - 27.50]: neutral 0.52
+--- 3.00s with no face detected (this is NOT neutral) ---
+[30.50 - 33.50]: neutral 0.49
+[34.00 - 34.50]: surprised 0.63
+--- 2.50s with no face detected (this is NOT neutral) ---
+[37.00 - 37.50]: neutral 0.48
+[38.50 - 40.00]: sad 0.61
+[40.50 - 45.50]: neutral 0.62
+[46.50 - 47.00]: happy 0.63
+--- 4.00s with no face detected (this is NOT neutral) ---
+[51.00 - 52.50]: neutral 0.52
+--- 2.50s with no face detected (this is NOT neutral) ---
+[55.00 - 55.50]: sad 0.45
+--- 1.50s with no face detected (this is NOT neutral) ---
+[57.00 - 58.00]: happy 0.45
+[58.50 - 61.00]: neutral 0.52
+[62.00 - 63.00]: neutral 0.52
+--- 3.50s with no face detected (this is NOT neutral) ---
+[66.50 - 67.50]: neutral 0.48
+--- 1.50s with no face detected (this is NOT neutral) ---
+[69.00 - 70.00]: sad 0.68
+[70.50 - 71.00]: happy 0.51
+--- 2.00s with no face detected (this is NOT neutral) ---
+[73.00 - 74.50]: happy 0.58
+--- 1.50s with no face detected (this is NOT neutral) ---
+[76.00 - 77.50]: neutral 0.63
+[78.00 - 78.50]: sad 0.46
+--- 1.50s with no face detected (this is NOT neutral) ---
+[80.00 - 80.50]: surprised 0.47
+[81.00 - 81.50]: happy 0.66
+[82.00 - 83.50]: neutral 0.49
+--- 1.50s with no face detected (this is NOT neutral) ---
+[85.00 - 85.50]: happy 0.78
+[86.00 - 87.00]: neutral 0.55
+[87.50 - 95.00]: happy 0.86
+
+============================================================
+SECTION 4 - Word-by-word timeline (one timestamp per word, source language)
+Words: 211
+Row: [start - end] word - clip.start / clip.end must come from here
+============================================================
+
+[0.00 - 0.06] If
+[0.06 - 0.22] this
+[0.22 - 0.36] is
+[0.36 - 0.56] green,
+[0.66 - 0.84] I'll
+[0.84 - 1.02] dye
+[1.02 - 1.16] my
+[1.16 - 1.38] hair
+[1.38 - 1.86] brunette.
+--- 2.75s with no speech ---
+[4.61 - 4.97] Yellow.
+[5.25 - 5.51] If
+[5.51 - 5.57] this
+[5.57 - 5.65] is
+[5.65 - 5.83] pink,
+[5.87 - 5.99] I'll
+[5.99 - 6.11] tell
+[6.11 - 6.23] you
+[6.23 - 6.29] a
+[6.29 - 6.49] secret
+[6.49 - 6.73] I've
+[6.73 - 6.91] never
+[6.91 - 7.11] told
+[7.11 - 7.33] anyone.
+--- 4.22s with no speech ---
+[11.55 - 11.89] Wait,
+[11.91 - 12.01] now
+[12.01 - 12.15] I
+[12.15 - 12.27] want
+[12.27 - 12.39] to
+[12.39 - 12.57] know.
+[12.81 - 13.03] If
+[13.03 - 13.15] this
+[13.15 - 13.29] is
+[13.29 - 13.53] green,
+[13.59 - 13.75] we're
+[13.75 - 13.85] getting
+[13.85 - 14.01] a
+[14.01 - 14.17] cockle
+[14.17 - 14.55] spaniel
+[14.55 - 14.69] next
+[14.69 - 14.99] week.
+--- 2.45s with no speech ---
+[17.44 - 17.80] Yellow.
+[18.00 - 18.04] Is
+[18.04 - 18.04] that
+[18.04 - 18.22] green?
+[18.54 - 18.90] That's
+[18.90 - 19.16] green.
+[19.34 - 19.54] That's
+[19.54 - 19.70] yellow.
+[19.86 - 20.08] That's
+[20.08 - 20.14] green.
+[20.74 - 21.10] Okay,
+[21.30 - 21.62] if
+[21.62 - 21.84] this
+[21.84 - 22.06] is
+[22.06 - 22.54] green,
+[22.80 - 23.26] we're
+[23.26 - 23.38] getting
+[23.38 - 23.68] takeaway
+[23.68 - 23.96] tonight.
+[24.22 - 24.30] Oh,
+[24.30 - 24.48] please
+[24.48 - 24.70] be
+[24.70 - 24.86] green.
+[25.10 - 25.30] If
+--- 4.14s with no speech ---
+[29.44 - 29.52] this
+[29.52 - 29.58] is
+[29.58 - 29.74] pink,
+[29.74 - 29.90] we're
+[29.90 - 30.12] ordering
+[30.12 - 30.32] Thai
+[30.32 - 30.54] food,
+[30.68 - 30.84] which
+[30.84 - 30.94] is
+[30.94 - 31.08] what
+[31.08 - 31.18] I
+[31.18 - 31.36] want.
+[31.54 - 31.80] Okay,
+[31.84 - 31.98] Thai.
+[32.22 - 32.58] If
+--- 2.06s with no speech ---
+[34.64 - 34.70] this
+[34.70 - 34.82] is
+[34.82 - 34.96] green,
+[35.00 - 35.14] I'm
+[35.14 - 35.24] falling
+[35.24 - 35.52] pregnant
+[35.52 - 35.78] next
+[35.78 - 36.02] year.
+[36.12 - 36.34] Thank
+--- 3.70s with no speech ---
+[40.04 - 40.26] God.
+[40.46 - 40.82] If
+[40.82 - 40.98] this
+[40.98 - 41.10] is
+[41.10 - 41.26] yellow,
+[41.42 - 41.82] all
+[41.82 - 42.00] my
+[42.00 - 42.32] dreams
+[42.32 - 42.52] come
+[42.52 - 42.76] true.
+[43.04 - 43.20] I
+--- 3.28s with no speech ---
+[46.48 - 46.62] was
+[46.62 - 46.72] about
+[46.72 - 46.84] to
+[46.84 - 47.08] say,
+[47.08 - 47.20] if
+[47.20 - 47.30] this
+[47.30 - 47.38] is
+[47.38 - 47.68] orange.
+[48.12 - 48.48] If
+[48.48 - 48.62] this
+[48.62 - 48.72] is
+[48.72 - 48.92] pink,
+[48.96 - 49.12] I'm
+[49.12 - 49.34] buying
+[49.34 - 49.48] my
+[49.48 - 49.74] glasses
+[49.74 - 50.06] cut.
+[50.56 - 50.88] If
+--- 2.06s with no speech ---
+[52.94 - 53.12] this
+[53.12 - 53.26] is
+[53.26 - 53.42] pink,
+[53.48 - 53.66] you're
+[53.66 - 53.86] buying
+[53.86 - 54.02] my
+[54.02 - 54.26] glasses
+[54.26 - 54.54] cut.
+--- 3.16s with no speech ---
+[57.70 - 58.02] If
+[58.02 - 58.20] this
+[58.20 - 58.30] is
+[58.30 - 58.58] green,
+[58.80 - 59.38] you
+[59.38 - 59.48] have
+[59.48 - 59.54] to
+[59.54 - 59.68] pay
+[59.68 - 59.76] for
+[59.76 - 59.88] my
+[59.88 - 60.08] gym
+[60.08 - 60.40] membership
+[60.40 - 60.60] for
+[60.60 - 60.70] the
+[60.70 - 60.92] month.
+[61.47 - 61.79] Oh.
+[62.53 - 62.85] If
+--- 3.31s with no speech ---
+[66.16 - 66.48] this
+[66.48 - 66.60] is
+[66.60 - 66.82] green,
+[66.88 - 67.00] we
+[67.00 - 67.08] have
+[67.08 - 67.16] to
+[67.16 - 67.30] swap
+[67.30 - 67.56] clothes
+[67.56 - 67.70] for
+[67.70 - 67.82] the
+[67.82 - 67.98] day.
+--- 2.10s with no speech ---
+[70.08 - 70.40] Yellow.
+[70.64 - 70.88] I
+[70.88 - 71.06] need
+[71.06 - 71.20] to
+[71.20 - 71.28] get
+[71.28 - 71.44] my
+[71.44 - 71.68] nails
+[71.68 - 71.90] done
+[71.90 - 72.06] at
+[72.06 - 72.10] the
+[72.10 - 72.24] end
+[72.24 - 72.36] of
+[72.36 - 72.40] the
+[72.40 - 72.62] week.
+[72.62 - 72.78] If
+[72.78 - 72.92] this
+[72.92 - 73.02] is
+[73.02 - 73.30] pink,
+[73.40 - 73.54] you
+[73.54 - 73.74] have
+[73.74 - 73.94] to
+[73.94 - 74.08] pay
+[74.08 - 74.26] for
+[74.26 - 74.52] them.
+[74.70 - 74.88] If
+[74.88 - 75.00] this
+--- 2.70s with no speech ---
+[77.70 - 77.78] is
+[77.78 - 77.92] pink,
+[77.96 - 78.04] you
+[78.04 - 78.14] have
+[78.14 - 78.22] to
+[78.22 - 78.34] bring
+[78.34 - 78.44] me
+[78.44 - 78.70] coffee
+[78.70 - 78.88] in
+[78.88 - 79.04] bed
+[79.04 - 79.20] for
+[79.20 - 79.28] the
+[79.28 - 79.52] rest
+[79.52 - 79.62] of
+[79.62 - 79.70] the
+[79.70 - 79.86] week
+[79.86 - 80.02] every
+[80.02 - 80.30] morning.
+[80.48 - 80.68] If
+--- 3.80s with no speech ---
+[84.48 - 84.62] this
+[84.62 - 84.78] is
+[84.78 - 85.08] pink,
+[85.16 - 85.32] you
+[85.32 - 85.58] guys
+[85.58 - 85.76] have
+[85.76 - 85.98] to
+[85.98 - 86.12] do
+[86.12 - 86.36] whatever
+[86.36 - 86.72] I
+[86.72 - 87.02] say.
+[87.48 - 87.80] Okay.
+--- 6.38s with no speech ---
+[94.18 - 94.50] Sorry.

@@ -97,7 +97,7 @@ The final output MUST use EXACTLY this structure:
 "Trimclip": {
 "Scene": "中文场景描述",
 "Action": "中文动作描述",
-"Speech text": "中文语音翻译"
+"Speech text": "en"
 }
 }
 }
@@ -137,7 +137,7 @@ No multiple clip objects.
 No alternative results.
 
 ==================================================
-4. HARD 15-SECOND RULE
+4. HARD 12-SECOND RULE
 ======================
 
 For a NORMAL highlight:
@@ -156,15 +156,15 @@ The actual timestamps MUST satisfy the limit.
 
 Changing only the duration field is NOT acceptable.
 
-The 15-second limit is a REAL TIMELINE CONSTRAINT.
+The 12-second limit is a REAL TIMELINE CONSTRAINT.
 
 ==================================================
-5. 15 SECONDS IS A HARD CEILING, NOT A TARGET
+5. 12 SECONDS IS A HARD CEILING, NOT A TARGET
 =============================================
 
-15 seconds is the MAXIMUM allowed duration for a normal highlight.
+12 seconds is the MAXIMUM allowed duration for a normal highlight.
 
-15 seconds is NOT:
+12 seconds is NOT:
 
 * a target
 * a preferred duration
@@ -174,24 +174,23 @@ The 15-second limit is a REAL TIMELINE CONSTRAINT.
 
 NEVER extend a clip simply because unused time remains.
 
-NEVER attempt to make every clip close to 15 seconds.
+NEVER attempt to make every clip close to 12 seconds.
 
 A valid highlight may naturally be:
 
 5 seconds
 7 seconds
 9 seconds
-11 seconds
-13 seconds
-15 seconds
+12 seconds
+
 
 The actual duration MUST be determined by the editorial content.
 
-If the complete highlight naturally ends at 6.5 seconds:
+If the complete highlight naturally ends at 6.0 seconds:
 
-use approximately 6.5 seconds.
+use approximately 6.0 seconds.
 
-Do NOT extend it to 15 seconds.
+Do NOT extend it to 12 seconds.
 
 ==================================================
 6. CORE EDITORIAL PRINCIPLE
@@ -404,16 +403,16 @@ A setup-only clip is normally weaker than a complete setup + event + payoff clip
 Never extend a clip because:
 
 * it is short
-* 15 seconds remains available
+* 12 seconds remains available
 * the event is interesting
 * another event is about to begin
 * the timeline has unused space
 
 Every included second MUST have editorial value.
 
-If the event naturally ends at 7 seconds:
+If the event naturally ends at 6 seconds:
 
-STOP at 7 seconds.
+STOP at 6 seconds.
 
 ==================================================
 14. NO ARTIFICIAL SHORTENING
@@ -439,13 +438,13 @@ those seconds MUST remain.
 15. LONG EVENT HANDLING
 =======================
 
-If an important event naturally lasts longer than 15 seconds:
+If an important event naturally lasts longer than 12 seconds:
 
-Do NOT automatically select the first 15 seconds.
+Do NOT automatically select the first 12 seconds.
 
-Do NOT automatically select the last 15 seconds.
+Do NOT automatically select the last 12 seconds.
 
-Do NOT cut arbitrarily at 15 seconds.
+Do NOT cut arbitrarily at 12 seconds.
 
 Instead identify the strongest coherent sub-unit.
 
@@ -463,9 +462,9 @@ Select the strongest coherent sub-unit that:
 1. remains understandable
 2. contains the core event
 3. contains the necessary payoff
-4. fits <=15 seconds
+4. fits <=12 seconds
 
-If no coherent <=15-second sub-unit exists:
+If no coherent <=12-second sub-unit exists:
 
 select another candidate.
 
@@ -475,14 +474,14 @@ Do NOT create a broken highlight merely to satisfy the duration rule.
 16. OUTRO / WRAP-UP EXCEPTION
 =============================
 
-A NORMAL highlight MUST be <=15 seconds.
+A NORMAL highlight MUST be <=12 seconds.
 
-A clip MAY exceed 15 seconds ONLY when:
+A clip MAY exceed 12 seconds ONLY when:
 
 1. it is genuinely a closing/outro editorial unit
 2. the closing contains meaningful editorial value
 3. shortening it materially damages the natural completion
-4. no coherent <=15-second version preserves the same completion
+4. no coherent <=12-second version preserves the same completion
 
 A genuine outro may contain:
 
@@ -502,7 +501,7 @@ Do NOT label a normal highlight as an outro merely to bypass the 15-second rule.
 
 Even for an outro:
 
-FIRST attempt to keep it <=15 seconds.
+FIRST attempt to keep it <=12 seconds.
 
 ==================================================
 17. FULL-VIDEO SEARCH
@@ -804,15 +803,15 @@ Duration MUST NOT dominate the score.
 
 Examples:
 
-A 7-second complete highlight with strong payoff may score 92.
+A 6-second complete highlight with strong payoff may score 92.
 
-A 12-second complete highlight with stronger impact may score 96.
+A 8-second complete highlight with stronger impact may score 96.
 
-A 5-second incomplete reaction may score 55.
+A 10-second incomplete reaction may score 55.
 
-A 14-second complete and highly compelling event may score 94.
+A 11-second complete and highly compelling event may score 94.
 
-A 15-second clip is NOT automatically better than a 7-second clip.
+A 12-second clip is NOT automatically better than a 7-second clip.
 
 A 7-second clip is NOT automatically better than a 12-second clip.
 
@@ -1988,9 +1987,9 @@ Never:
 
 select a clip merely because it is short.
 
-select a clip merely because it is 15 seconds.
+select a clip merely because it is 12 seconds.
 
-extend a clip merely because 15 seconds are available.
+extend a clip merely because 12 seconds are available.
 
 remove necessary context merely to reduce duration.
 
@@ -2044,15 +2043,15 @@ Before returning the final JSON, internally ask:
 
 14. Am I selecting it merely because it is short?
 
-15. Am I extending it merely because 15 seconds is available?
+15. Am I extending it merely because 12 seconds is available?
 
 16. Is this the shortest COMPLETE version?
 
 17. Is another candidate approximately equal but shorter and complete?
 
-18. Is the normal clip <=15 seconds?
+18. Is the normal clip <=12 seconds?
 
-19. If it exceeds 15 seconds, is it genuinely an outro?
+19. If it exceeds 12 seconds, is it genuinely an outro?
 
 20. Is the score based on editorial quality rather than duration?
 
