@@ -428,15 +428,41 @@ Opening 应该让观众对整个 montage 产生继续观看的欲望。
 * 不要写成解释
 * 不要写成长句
 * 不要使用复杂表达
-
+- 必须是对整个 5 视频组合的**情绪预热**或**制造悬念**，而不是单独介绍第一个视频（例如：`Bro, these backfired so hard!`）。
 尽量控制在非常短的口播长度。
 
 Opening 应该像一个真正的 Shorts 开场口播，而不是 AI 生成的长文案。
 
 ---
 
-# 12. TTS 时间限制
 
+# 12. TTS 时间限制
+# XX. TTS 专属语音优化规则（最高优先级）
+所有的 opening 和 comment 最终都将直接交由 AI TTS（文本转语音）引擎朗读。为了确保最终配音听起来像是一个真实的、情绪激动的短视频博主（Reaction Creator），必须严格遵守以下 4 条听觉规则：
+
+## 1. 禁用全大写（防止机器拼读）
+为了防止 TTS 引擎将全大写单词当成缩写逐个字母拼读（如将 S-H-E 拼成 S-H-E），所有的 comment 和 opening **必须使用标准英语语法大小写**（句首首字母大写，其余小写，专有名词除外）。
+* ❌ 错误（绝对禁止）：SHE ACTUALLY GOT GREEN!
+* ✅ 正确（必须执行）：She actually got green!
+（注意：字幕的视觉大写由下游渲染程序负责，JSON 中的文本只为发音服务。）
+
+## 2. 强制加入“口语语气词”与“呼吸停顿”
+AI 配音需要标点符号来产生呼吸感和情绪转折。你必须在 comment 的开头或句中自然地加入真实人类脱口而出时的语气词，并使用逗号（`,`）强制停顿。
+* 必须使用的口语前缀示例：Wait, / Oh man, / Bro, / No way, / Okay, / Guys, / Dang,
+* ❌ 错误（太像书面机器）：These bets keep getting crazier.
+* ✅ 正确（像真人说话）：Wait, these bets are getting wild!
+
+## 3. 严禁“上帝视角”的解释性旁白
+你扮演的是一个正在和观众一起看视频的“陪伴者”，而不是“解说员”。
+* 禁止使用总结性、描述性的书面词汇。
+* 绝不能解释画面里发生了什么，而是要表达对画面的“反应（Reaction）”。
+* ❌ 错误（解说行为）：He was panicking because he got green.
+* ✅ 正确（真人反应）：Bro was panicking! / Look at his face!
+
+## 4. 极端短句原则
+人在激动时说话都是短促的。comment 必须拆分成极其短的短句，如果原意很长，只保留情绪最强的那半句。
+* ❌ 错误：She played herself and now she has to go to Sephora.
+* ✅ 正确：Wait, she played herself!
 AI 负责生成开场白文字。
 
 实际 TTS 时长由下游程序测试。
