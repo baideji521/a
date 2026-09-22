@@ -1,0 +1,4 @@
+〔台账·活跃·w-a19c7f72〕
+- [ ] dsh-web-3081 | pollwatch4 差分版监视器 | 2026-09-20 14:45 | /health 差分 + 日志事件；命中率锚定 10:00 全量重扫（SINCE 常量）；20s 一轮 | job pwsh-8
+- [ ] dsh-web-3081x | 手机1 推送带账号的模块 | 2026-09-20 12:35 | 手机1 仍跑旧模块，qping 无账号字段。LAN-only 且 app 命名空间无 su，/selfupdate 被拒（no-root）；需插 USB 或先在 Magisk 给 com.larus.nova 授权 | 待建
+- [ ] dsh-web-3081x | Token 控制台 线路轮询+标准API | 2026-09-20 15:10 | 18920；lane:线名 路由 + /v1/chat/completions 标准传参；后端 pwsh-93
