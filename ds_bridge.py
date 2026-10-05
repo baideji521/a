@@ -457,6 +457,21 @@ STREAM_HOLD = ("```", "<|", "<｜", "<|D", "```json")
 # 末尾保留多少字符不发（够装下一个标记开头），确认安全后再吐。
 STREAM_KEEP = 24
 
+# 2026-10-05：标记之后是不是真的跟着一个调用 —— 只有跟着才截。
+#
+# STREAM_HOLD 里的 ``` 在原设计里是"可能后面跟着工具调用 JSON"，见到就停。
+# 实测（310，12:50:15 / 12:59:18）那对围栏只是模型在引用一段代码或一段输出，
+# 跟调用毫无关系 —— 一停就意味着这一发正文只吐出去 4%，剩下全靠收尾补，
+# 而收尾补的时候客户端常常已经不听了（那两发就是这么丢的）。
+#
+# 逐处检查：每个标记往后 _CALL_WIN 字内命中 _CALL_HINT 才算调用。
+_CALL_HINT = re.compile(
+    r"\{\s*\"tool_calls\""
+    r"|<invoke\s+name="
+    r"|\"name\"\s*:\s*\"[A-Za-z_][A-Za-z0-9_]*\"\s*,\s*\"arguments\"",
+    re.I)
+_CALL_WIN = 200      # 标记之后看多少字
+
 STREAM_CHUNK_SEC = 0.0          # 0 = 不节流，上游来一片就发一片（2026-09-22 用户要求：
                                 # 先试逐片发送，与「上游本来就是每片 1 字」保持一致）
 STREAM_CHUNK_CHARS = 0          # 0 = 不看字数上限
@@ -734,6 +749,98 @@ def group_session_set(group, slug, sid):
         tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=1),
                        encoding="utf-8")
         tmp.replace(GROUP_SESS_FILE)
+        return True
+    except BaseException:            # noqa: BLE001
+        return False
+
+
+# ===== 窗口链头（2026-10-05）=====
+# 用户口径：「通过标题获取链 在用链发过去」「如果上游窗口标题不在了 创建窗口的
+# 时候 改完标题 取 session id 这个条件触发 不用每次都获取」。
+#
+# 要解决什么：固定组窗口分支（plan() 的 11749 那条）一直传 parent=None，于是同一个
+# 窗口里的消息**各自是根、不是一条链**。实测：
+#   020 窗口 113 条 USER / parent=None 113 条；113 窗口 210/223 是 None。
+# 上游按 parent 串链，parent=None 的请求**上下文只有它自己那一发**（实测：310 窗口
+# 已有 202 条时，桥发的那条 accum=779，而上一条 assistant 是 18195）。
+# 后果：上一轮的工具结果附件，这一轮模型看不到 -> 反复重查。
+#
+# 怎么记：**按 sid 存最后一条 message id**。来源两处，都不额外查上游：
+#   1) 建窗口时那两次 ask 的返回（new_session -> ask("好") / ask(喂养上下文)）
+#   2) 每次成功回复后上游给的 response_message_id（remember 的同一刻）
+# 只有「这个 sid 从没见过」时才向上游要一次 current_message_id 兜底（一次性）。
+#
+# 文件形状：{"<sid>": <最后一条 message id>}。0 = 已确认是空窗口。
+WINDOW_HEADS_FILE = _conf_file("_window_heads.json")
+_whs_cache = {"key": None, "root": {}}
+_whs_lock = threading.Lock()
+
+
+def _window_heads():
+    """整份「sid -> 最后一条 message id」。文件变了才重读，坏了退回空表。"""
+    try:
+        st = WINDOW_HEADS_FILE.stat()
+        key = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        key = None
+    with _whs_lock:
+        if key is not None and key == _whs_cache["key"]:
+            return _whs_cache["root"]
+        data = {}
+        if key is not None:
+            try:
+                raw = json.loads(WINDOW_HEADS_FILE.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                raw = None
+            if isinstance(raw, dict):
+                for sid, mid in raw.items():
+                    s = str(sid or "").strip()
+                    try:
+                        m = int(mid)
+                    except (TypeError, ValueError):
+                        continue
+                    if s:
+                        data[s] = m
+        _whs_cache["key"] = key
+        _whs_cache["root"] = data
+        return data
+
+
+def window_head_of(sid):
+    """这个窗口已知的链头。**没有记录返回 None**（区别于「查到是空窗口 = 0」）。"""
+    s = str(sid or "").strip()
+    if not s:
+        return None
+    return _window_heads().get(s)
+
+
+def window_head_set(sid, mid):
+    """记下这个窗口的链头。转不成整数的值一律不记（宁可不知道，也别接一条假链）。"""
+    s = str(sid or "").strip()
+    if not s:
+        return False
+    try:
+        m = int(mid)
+    except (TypeError, ValueError):
+        return False
+    if m < 0:
+        return False
+    try:
+        try:
+            raw = json.loads(WINDOW_HEADS_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            raw = None
+        if not isinstance(raw, dict):
+            raw = {}
+        # 只留最近的 200 条，别让这个文件无限涨
+        if len(raw) > 200 and s not in raw:
+            for _k in list(raw.keys())[:len(raw) - 200]:
+                raw.pop(_k, None)
+        raw[s] = m
+        tmp = WINDOW_HEADS_FILE.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=1),
+                       encoding="utf-8")
+        tmp.replace(WINDOW_HEADS_FILE)
         return True
     except BaseException:            # noqa: BLE001
         return False
@@ -4693,6 +4800,16 @@ ROLE_LABEL = {
     "function": "工具结果",
 }
 
+# 2026-10-05（用户口径：「被截断到 9500+ 字符，截断在 "&&&&&&"
+#   可以把这个去掉了用不到了」）：
+# **从下面的协议文本里删掉了一条令：
+#   「不超1万字如果超1万字用 "&&&&&&"结尾」。**
+#
+# 它原来是为了防“一次回复太长被上游截断”，但现在工具结果
+# **全部走附件**（不进正文），已经没有“结果太长”这个问题了。
+# 留着它反而有害：模型会忠实地在 1 万字处自己砍断，
+# 结果就是“附件里只有前 9500 字 + 一串 &&&&&&” —— 结果被截了，
+# 而且模型以为自己已经拿到了全部。
 TOOL_PROTOCOL = r"""
 
 你现在接在一个工具执行器后面。可以调用下面列出的工具。
@@ -4873,7 +4990,6 @@ PTC_PROTOCOL = r'''
   read 要 file_path，grep 要 pattern）。别把 arguments 当参数名。
 - 一段 code 里可以调多次，也可以处理返回值后再 return。
 - 整条回复只输出那一个 JSON 代码块，别加解释文字。
-- 不超1万字如果超1万字用 "&&&&&&"结尾
 关于 get_range_context_compact（硬规则，两条协议一样）：
 - **只有同时给 from 和 to，才允许调它** —— 那才是"范围"。
 - **只给 from（固定单号）不许调它**：那是单点查询，走单点读取的工具。
@@ -5192,9 +5308,18 @@ ACTIVE_TASK_HEAD = "【当前任务】"
 #    【任务状态】内容就是 16:37:48 那句"我在此待命"—— 零信息量，
 #    还占了最前面最容易注意到的位置。
 #
-# 保留说明：active_task_block（【当前任务】）**不删** —— 它解决的是另一个
-# 问题（工具链第二跳起任务原文从 delta 里消失），并且实测有效。
-# 只删"已完成"这一半。
+# 2026-10-05 更新（用户口径「**不要让桥说 我说的啥就发啥就行**」）：
+# **active_task_block（【当前任务】）也整段停用了。**
+#
+# 它原本的理由成立（工具链第二跳起，任务原文确实会从 delta 里消失），
+# 但**手段是错的**：它取 `_real_user_text()`（最后一条 user 消息）当任务，
+# 而用户在长活里最常说的就是「继续」—— 于是补出一个空指令，
+# 还配一句“以这一句为准”，**把真正的任务盖掉**。
+# 实测：【当前任务】继续 -> 模型“不知道要做什么”-> 去工作区找 -> 抓到旧产物。
+#
+# 函数体保留（不删），以便回滚；但**两处调用点已全部移除**，
+# 所以它现在是死代码。要恢复：把两处 `# ==== 删：补当前任务` 处的
+# 原逻辑放回去即可。
 # ============================================================================
 
 
@@ -5617,8 +5742,115 @@ def render_turn(msg):
 
     if role in ("tool", "function"):
         name = msg.get("name") or msg.get("tool_call_id") or ""
-        head = f"工具结果（{name}）" if name else "工具结果"
-        return f"【{head}】\n{text}"
+        # 2026-10-05（用户口径：「**用户是正文 工具结果走附件**」
+        # 「就是一个字 只要是结果就发附件」）：
+        # **工具结果不进正文** —— 收进 LAST_TOOLRESULTS，由 run() 上传成附件。
+        #
+        # 正文里只留一行占位，让模型知道“这里本来有个结果，它在附件里”。
+        # 不放全文的理由就是用户说的：它会把用户的话挤没。
+        # 按 (role, 标识) 去重：plan() 里 render_turn 会被调两次
+        # （稳态 delta 构 parts 一次、build_prompt 又一次），
+        # 不去重的话同一份结果会在附件里出现两遍。
+        # 用正文哈希做键 —— 内容一样就是同一份，不管调多少次。
+        # 2026-10-05（用户口径：「一个命令返回一个附件」「只把他结果
+        # 文本发过去就行」）：**每份结果带自己的标识，各成一个附件。**
+        #
+        # 为什么：原来全部结果拼成一份「工具结果.txt」，而且每一轮
+        # 都叫同一个名字 —— 模型看到“工具结果.txt”时分不清是哪一轮的。
+        # 实测 020 连续 23 发都在重复探查，很可能就是因为它认不出
+        # “刚才那份结果”和“这份结果”是不是同一份。
+        #
+        # 标识用 tool_call_id（DSH 给的，每轮唯一）；没有就用内容哈希前 8 位。
+        # 名字里只留 ASCII（附件名越干净越好，避免上游对中文名做意外处理）。
+        _ident = ""
+        try:
+            # 2026-10-05（用户口径，最后一遍：「**附件是需要的时候才上传，不需要的
+            # 时候就是累赘**」）：
+            # **只收"这一轮真的要发给模型"的那些工具结果。**
+            #
+            # 病（310 号实测 13:23:44）：附件实挂 **25 份** toolout，全是几百轮前
+            # 的旧结果；单轮 prompt 99,813 字（顶满 10 万闸门靠削尾），
+            # 单轮 5.5 万 token，窗口累计 895,723 —— 上游对这么大的请求本来就
+            # 容易回空/限流，用户看到的"频繁"就是这么来的。
+            #
+            # 为什么原来会 25 份：render_turn 被**两条路**调 ——
+            #   ① build_prompt 的全量渲染（从 messages 头一路渲染到所有历史）
+            #   ② _sel 增量渲染（真正要发的那几条）
+            # ① 不管 known、把历史上每一份工具结果都墨进收集器；而 ② 反而是空的
+            # （_delta_items 早把 tool 消息当"发过了"剔掉了）。一边剔、一边挂，
+            # 互相打架 —— 附件跟 _sel 不一致，跟 messages 全量一致。
+            #
+            # 现在只让 ② 这条路收集（用 _COLLECT_TOOLS 开关，全量那趟关掉）。
+            # 结果就是：读 1 个文件 -> 1 份附件；读 3 个 -> 3 份；没读 -> 0 份。
+            # 2026-10-05（用户口径，最终版：「**只要是当次模型回复用工具读取的文档都上传**」
+            # 「我说的是当次」）：**只有"当次"的工具结果才进附件。**
+            #
+            # "当次"的判据（实测 dsh 发来的 messages 尾部结构，_relay_msgs.jsonl）：
+            #   [144] assistant  tool_calls=True     <- 模型这轮调工具
+            #   [145] tool       tcid=call_0_6ba5e1d90d7d  <- 当次结果
+            # 即 **messages 末尾那段（assistant 调工具 + 紧跟的 tool 结果）**。
+            #
+            # 为什么不能靠 _COLLECT_TOOLS 开关：那个只区分"哪条渲染路径" ——
+            # 而固定窗口那条路每轮都把 _sel 从历史里凑（还因为"兜底削尾"被塞到
+            # 10 万字），历史 tool 消息照样被重新选中、重新挂。实测 13:54 那发
+            # 仍然挂了 22 份（21 份是旧的）。
+            #
+            # 所以判据换成 **tool_call_id 在不在"当次集合"里**（见 _CUR_TOOL_IDS，
+            # 由 plan() 按 messages 尾部算出）。不在就是旧的 -> 一份都不传。
+            _tid = str(msg.get("tool_call_id") or "")
+            _is_cur = bool(_CUR_TOOL_IDS) and (_tid in _CUR_TOOL_IDS)
+            if _COLLECT_TOOLS[0] and _is_cur and text.strip():
+                _h = hashlib.sha1(text.encode("utf-8")).hexdigest()
+                _ident = re.sub(r"[^A-Za-z0-9]", "", str(name or ""))[-10:] \
+                    or _h[:8]
+                if _h not in _LAST_TOOLSEEN:
+                    _LAST_TOOLSEEN.add(_h)
+                    LAST_TOOLRESULTS.append(
+                        ("【工具结果" + (("（" + name + "）") if name else "")
+                         + "】" + chr(10) + text + chr(10) + chr(10)))
+                    _LAST_TOOLNAMES.append(_ident)
+        except BaseException:        # noqa: BLE001
+            pass
+        # 2026-10-05（用户口径：「**得告诉他这是他运行的结果**」）：
+        # 占位符必须说清三件事，否则模型不知道那附件是什么：
+        #   ① 这是**你（助手）自己调工具产生的结果**，不是用户给的东西；
+        #   ② 全文在附件里（不在正文）；
+        #   ③ 需要就直接读，不要重新发起那个工具调用。
+        #
+        # 为什么要点明“你自己调的”：原来全文在正文里时，
+        # 模型靠上下文就能认出“我刚发了一个工具调用”；现在只剩一行，
+        # 不点明的话它可能把附件当成外来资料，反复重新调工具取同一份东西。
+        head = f"=执行结果（{name}）" if name \
+            else "执行结果"
+        _fname = "toolout-" + _ident + ".txt" if _ident else "执行结果.txt"
+        # 2026-10-05（用户口径：「**你得让 ai 知道这是他执行工具的产物**」）：
+        # **改成第一人称。**
+        #
+        # 原来写的是“**你**上一步调用工具后的运行结果”—— 意思对，
+        # 但它把这件事说成了“一个关于你的事实”，而不是“正在发生的事”。
+        # 模型对“我刚做了什么”最敏感 —— 一旦用第一人称写进它自己的动作链，
+        # 就不会把附件当成“别人发来的资料”。
+        #
+        # 而且开头直接写“我刚执行完的工具结果”——
+        # 它比“【工具结果】”不容易被当成一个独立的、新的输入块。
+        return (f"【{head}】"
+                f"（共 {len(text)} 字）—— 这是我自己的动作产物，不是用户说的话，也不是新任务。"
+                f"全文在附件「{_fname}」里。"
+                # 2026-10-05（用户口径：「告诉他附件本轮读取结果请读取并进行
+                # 下一步操作」）：**把"读"写成必须执行的步骤，不是一句提醒。**
+                #
+                # 病（实测 ds_bridge.log 2026-10-05 11:35~11:42，310 号）：
+                # 原文只说"读完必须把关键信息记住"，模型于是只看到「共 N 字」
+                # 这个长度、接着发下一个调用 —— 连发 7 轮列目录，最后自己说
+                # "返回结果一个字都没进到我的上下文里"。
+                # 中间那步"复述要点"有用：模型把看到的内容写进正文后，那句
+                # 正文就成了它下一轮的记忆（链已接上），实测有效。
+                f"**这一轮按顺序做三件事**："
+                f"① 打开这份附件把它读完 —— 它是我下一步唯一的依据；"
+                f"② 用一两句话说清这次拿到了什么（写进我的回复，留给下一轮的我）；"
+                f"③ 然后才决定下一步。**不要重发同一个调用**，也不要因为我没把"
+                f"内容直接摊在这里，就当作没拿到 —— 附件里就是全文。"
+                )
 
     return f"【{ROLE_LABEL.get(role, role)}】\n{text}"
 
@@ -5641,6 +5873,33 @@ def _loose_json(raw):
 LAST_DROPPED = []
 LAST_TOOLS = []
 LAST_LEDGER = []
+# 2026-10-05（用户口径：「用户是正文 工具结果走附件」）：
+#   **本轮要发的工具结果全文**，正文里不放，改上传成附件。
+#   由 bridge 在 run() 里装填（只放真正要发的那些，不是全历史）。
+LAST_TOOLRESULTS = []
+# 去重用：正文哈希集。render_turn 在一轮里会被调多次，
+# 没它的话同一份工具结果会在附件里重复出现。
+# 清空时机与 LAST_TOOLRESULTS 同步（plan() 入口 / build_prompt 开头）。
+_LAST_TOOLSEEN = set()
+# 每份结果的标识（tool_call_id 的 ASCII 尾段，或内容哈希前 8 位）。
+# 与 LAST_TOOLRESULTS 一一对应 —— 用来给附件起不同的名字，
+# 这样模型能分清“哪一份是哪一轮的”。
+#
+# 2026-10-05 事故记录：这一行被我编辑时**误删过**，于是 run() 里那句
+#   `_LAST_TOOLNAMES[_i]` 直接 NameError，每一发都崩（13:30 那两次）。
+# 加定义跟在用之前 —— 这个文件里凡是"成对存在"的全局，删一个就要查另一个。
+_LAST_TOOLNAMES = []
+# 2026-10-05：**这个开关决定 render_turn 要不要把工具结果收进附件收集器。**
+#   开 = 这一批渲染的就是"要发给模型的"（plan() 的 _sel 那条路）→ 收
+#   关 = 只是把整个历史摊平（build_prompt 全量那趟）→ 不收
+# 理由见 render_turn 里那段注释（用户口径：附件需要时才传，不需要是累赘）。
+_COLLECT_TOOLS = [True]
+# 2026-10-05：**"当次"的 tool_call_id 集合。**
+# 由 plan() 按客户端发来的 messages 尾部算 —— 尾部那段就是"这一轮刚发生的事"：
+#   [n-1] assistant tool_calls=True   模型这轮调工具
+#   [n]   tool tcid=call_xxx          当次结果
+# render_turn 只把 id 落在这个集合里的 tool 消息收进附件（其余不传）。
+_CUR_TOOL_IDS = set()
 
 # 附件按「帐号 + 内容 hash」缓存 file id。附件 id 是按帐号归属的，
 # 所以键必须带 slug；换号即查不到 -> 自动重传。
@@ -5666,7 +5925,9 @@ ATTACH_NOTE = (
     "  台账.txt   —— 全局进度台账（所有窗口共用）。每轮把「活跃」整栏贴给你，\n"
     "               里面有别的窗口登记的行；要登记就照它的行格式在「活跃」末尾追加。\n"
     "  这些文件都是本轮请求的一部分；没读到就等于没看上下文，别凭空补。\n"
-    "  读取请求的附件的文字就不要在会话中复述了，附件对于你来说很重要所有的答案都在里边请牢记")
+    "  读完就**把关键信息记住**（在你的回复里用自己的话说一下）。"
+    "  下一轮不会再把同一份附件给你 —— 所以读到的东西必须在这一轮"
+    "  变成你自己的记忆，否则下一轮就得重新查一遍。")
 
 # 关掉检查点时用的那一版：同一份文案，去掉检查点那几行。因为是从
 # ATTACH_NOTE 本体切出来的，永不与它分叉。
@@ -5885,22 +6146,30 @@ def tail_of(keys, items, sid, note, attach=False, attach_note=None, tools=None,
         #   F:/test 是别台机器的根。日志里 F:/test 共出现 219 次。
         # 于是 AI 拿着别人的根找目录，认不出就自建/改错目录 = 串号。
     blocks = []
-    if not attach and workflow_active:
-        # 2026-09-25：台账不再按窗口过滤，故不再传窗口 id（见 ledger_block）。
-        # 2026-10-03 工作流门：台账**只在工作模式注入**。
-        # 实测病根（_relay_msgs.jsonl，号 310）：普通聊天被灌了台账之后，
-        # 模型「想确认任务 -> 找台账 -> 台账不存在 -> 换个法子继续找」，
-        # 一路 100+ 条消息。台账本身一个字都不能改，只改什么时候读它。
-        #
-        # 2026-10-04：**再按「在不在组」收一道。** 固定号没有接手方，
-        # 台账（轮询接力用的进度载体）对它纯属累赘 —— 详见 ledger_applies()。
-        if ledger_applies(slug):
-            blocks.append(ledger_block(slug=slug))
+    # 2026-10-05（用户口径：「**020也不能有 啊 还有483**」「固定号干活的
+    # 时候为何要这么多什么也不要 让他自由发挥」）：
+    # **台账彻底停用 —— 不分固定号还是组号。**
+    #
+    # 原来这里是 `if ledger_applies(slug)`，只挡住了不在组里的固定号；
+    # 而真正量最大的正是在组里的两个（实测台账被实挂次数）：
+    #   020 2,658 次 / 483 2,631 次 / 309 495 / 310 78 / 113 68 / 779 46
+    # 也就是说条件写反了——两个最该不要的反而收得最多。
+    #
+    # ledger_block() 函数体保留（不删），以便回滚；但这里**不再调用**。
+    # 台账本来是轮询接力用的进度载体，而现在接手方靠的是【交接】段
+    # （换号那一发由 _hand_prompt 拼）—— 台账对模型只是一堆要自己去核对的数字。
     # 2026-09-27 第413步（用户口径：「把所有提醒的相关提示词全部规整，不要在
     # 提示中显示 —— 例如常驻提示、例如池提示、例如交接提示」）：常驻/池提醒
     # 不再单开一段〔提醒〕，改并入末尾**同一个**〔格式提醒〕段（见下）。于是
     # 注入提示里只剩一个提醒段，不再各占一段、各带一个抬头。
-    if attach:
+    # 2026-10-05（用户口径：「固定号干活的时候为何要这么多？什么也不要
+    # 让他自由发挥」）：**固定号只给「协议 + 工具」，其余一律不给。**
+    #
+    # 判据用 is_fixed_account(slug)（= 不在任何组里）。固定号没有接手方，
+    # 所有为“交接/轮询”设计的段对它都是累赘；组号（020/483）保留原样。
+    # 下面的〔格式提醒〕（含本机目录）同理。
+    _fixed_acct = is_fixed_account(slug)
+    if attach and not _fixed_acct:
         _an = pget("attach_note", ATTACH_NOTE) if attach_note is None \
             else attach_note
         if _an:
@@ -5958,19 +6227,21 @@ def tail_of(keys, items, sid, note, attach=False, attach_note=None, tools=None,
     # 别的地方出现不是很规则」）：本机目录块不再单独成段，改**并入格式提醒**这一
     # 段里 —— 于是全部绝对路径在 prompt 里只有这一个出现点，别处一律只写相对名
     # 并指回这里。格式提醒仍是绝对末尾、仍无条件每轮发。
-    _fmt_parts = []
-    _rem = reminder_block(note)
-    if _rem.startswith("〔提醒〕"):
-        # 抬头去掉：已经挂在〔格式提醒〕下面，不必再套一层〔提醒〕。
-        _rem = _rem[len("〔提醒〕"):].strip()
-    if _rem:
-        _fmt_parts.append(_rem)
+    # 2026-10-05（用户口径：「我发什么模型接收什么 不用桥去补偿」
+    # 「就新建窗口的时候发必要的协议工具」）：
+    # **桥不再自己发任何“提醒/规范”段。**
+    #
+    # 删掉的三样（都是桥自己写的行为规范，不是事实）：
+    #   · reminder_block(note)  常驻提醒 / 池提醒（“每轮报进度”之类）
+    #   · format_note            输出格式规范（用户在设置台自己填的）
+    #   · dir_block 里的那一大段   根目录/子目录/作废路径/平行目录/不存在的盘…
+    #
+    # 唯一保留的：**工作目录那一行**。
+    # 它不是“提醒”，是和协议/工具表同类的**必要事实** ——
+    # 模型不可能凭空知道你机器上目录叫什么。
+    # 子目录它自己 ls 一下就知道了，不用桥提前喂。
     if dir_block and str(dir_block).strip():
-        _fmt_parts.append(str(dir_block).strip())
-    if format_note and str(format_note).strip():
-        _fmt_parts.append(str(format_note).strip())
-    if _fmt_parts:
-        blocks.append("〔格式提醒〕" + chr(10) + (chr(10) * 2).join(_fmt_parts))
+        blocks.append(str(dir_block).strip())
     # 2026-10-04：**已删掉 casual guard 的追加。**
     # 它原来是「普通模式」下贴在最末尾的 12 行禁令
     # （「本轮禁止为下列目的调用任何工具」）。删它的理由见上面
@@ -6004,6 +6275,20 @@ def build_prompt(messages, tools, note="", budget=0, attach=False, keep=0,
     del LAST_DROPPED[:]
     del LAST_TOOLS[:]
     del LAST_LEDGER[:]
+    # 2026-10-05：工具结果收集器也清。注意只在**全量拼接**路径
+    # （build_prompt）清；增量路径由 plan() 自己控制清空时机。
+    # 原因：renderturn 是两条路都调的公共函数，不能在那里清。
+    del LAST_TOOLRESULTS[:]
+    _LAST_TOOLSEEN.clear()
+    del _LAST_TOOLNAMES[:]
+    # 2026-10-05（用户口径：「附件是需要的时候才上传，不需要的时候就是累赘」）：
+    # **这条全量路不收集工具结果。**
+    #
+    # 它是"把整个历史摊平"，render_turn 会一路渲染到**所有历史 tool 消息**，
+    # 于是几百轮前的结果全被墨进收集器 —— 实测 310 号一次挂 25 份附件。
+    # 而真正要发的是 plan() 选出来的 _sel（那里会自己开收集）。
+    # 这里关掉之后：读 1 个文件 -> 1 份附件；读 3 个 -> 3 份；没读 -> 0 份。
+    _COLLECT_TOOLS[0] = False
     _k, _i = SessionCache.fingerprint(messages)
     msgs = list(messages or [])
     lost = 0
@@ -6685,6 +6970,24 @@ def group_name_of(slug):
     return ""
 
 
+def is_fixed_account(slug):
+    """这个号是否是固定号（不在任何组里）。
+
+    2026-10-05（用户口径：「固定号干活的时候为何要这么多？什么也不要
+    让他自由发挥」）：给 tail_of() 用的分流判据。
+
+    固定号（本机：113 / 779 / 310 / 309）长期扛同一份活，**没有接手方**，
+    所以所有为“轮询接力”设计的段（台账/提醒/本机目录/格式规范）
+    对它都是累赘。用户要的是：**只给协议 + 工具，其余不给。**
+
+    组号（020/483）不受影响 —— 它们真的会换号，那些段对它有用。
+    """
+    s = str(slug or "").strip()
+    if not s:
+        return False
+    return not bool(group_name_of(s))
+
+
 def ledger_applies(slug):
     """这个号该不该收台账。False = 固定号，不插。
 
@@ -6780,8 +7083,19 @@ def dir_block_now(slug, messages):
             grp_ensure(_gname, slug=slug)
         except BaseException:        # noqa: BLE001
             pass
-    blk = dir_block_for(root, group_name_of(slug), slug)
-    return (head + blk) if blk else ""
+    # 2026-10-05（用户口径：「只发协议工具」「工作目录只留一行」）：
+    # **本机目录段精简成一行事实。**
+    #
+    # 为什么保留：它和协议/工具表一样，是**模型必须知道、
+    # 但无法自己知道**的事实 —— 它不可能凭空知道你机器上目录叫什么。
+    # 原来那一整段（根目录 + 组目录 + 七个子目录说明 + 作废路径告警
+    # + 平行目录检测 + 不存在的盘…）是**桥替模型做的环境解释**，
+    # 那不是事实而是教导 —— 用户要的是“给事实，别教我怎么干活”。
+    #
+    # 一行够了：模型看到工作目录就知道往哪写；需要子目录自己 ls 一下就行。
+    if not root:
+        return ""
+    return "工作目录 = " + str(root).rstrip("/")
 
 
 # ===== 隐式切组命令（2026-09-27 第356步，用户设计）=====
@@ -10747,10 +11061,56 @@ class Bridge:
             c[k] = c.get(k, 0) + 1
         for i, k in enumerate(keys):
             last[k] = i
+        # 2026-10-05（用户口径：「**我发什么模型接收什么**」「不用桥去补偿」）：
+        # **用户说的话永不剔除。**
+        #
+        # 病（实测，020 号 2026-10-05 07:5x 的真实 payload）：
+        #   用户原话「"C:\...\智普" 改造为 "C:\...\ds" "C:\...\dsweb"」
+        #   在第一跳发过 -> 进了 known -> **第二跳起永远被丢**。
+        #   于是 payload 里只剩：上一轮的工具调用 + 工具结果 + 协议段，
+        #   **一句“要做什么”都没有**。模型只能自己去读文件找任务，
+        #   抓到什么算什么（日志里它连续 6 发都在「明确当前任务」
+        #   「确认本组当前任务」，最后去弄了象棋.html）。
+        #
+        # 为什么是“用户消息不剔”而不是“桥补一句”：
+        #   补偿是**桥自己编的话**，它会编错（实测：最后一句是「继续」时
+        #   就补出【当前任务】继续，反而把真任务盖掉）。
+        #   而这里发的是**用户原话** —— 一个字都不改，不会错。
+        #
+        # 代价：每发多带那几条 user 消息（几十到几百字）。
+        # 但它们是**任务本身**，而且上游会缓存 —— 重发的成本远低于
+        # “模型不知道要干什么”的代价。
+        #
+        # 2026-10-05 第二次修（**第一版判据写错了，实测当场抳住**）：
+        #   第一版写的是  `_is_user = _role in ("user","developer")`，
+        #   **只看 role** —— 于是把 DSH 注入块也当成“用户的话”永不剔。
+        #   实测 08:12:47 那一发 payload（总 31,113 字）里的两条【用户】：
+        #       【用户】  480 字  = "Current runtime context. ... DSH file policy ..."
+        #       【用户】 2090 字  = "<system-reminder> ... available_skills ..."
+        #   **两条都不是用户写的**，而真正口令「把智普改造为 ds」
+        #   因为早进过 known，**依然被滤掉** —— 把该保的和不该保的搞反了。
+        #
+        # 正确的判据：**只保留“真用户发言”**，即 role=user 且不是 DSH 注入块。
+        #   桥里早就有这个判据 —— `_is_dsh_injected_user_text()`，
+        #   `_real_user_text()` 就是用它把注入块跳过去的。这里直接复用，不另写一套。
         delta, drop, resc = [], 0, 0
         for i, (k, m) in enumerate(zip(keys, items)):
+            # 2026-10-05（用户口径，明确要求：「**返回结果到上游的时候请不要
+            # 再复述我的话了**」）：
+            # **用户消息也一律走增量 —— 发过的就不再重发。**
+            #
+            # 上一版（今天上午加的）特意让"真用户发言永不剔除"，目的是让模型
+            # 每轮都看得见任务原文。代价是**用户说过的每一句话每轮都要重新贴
+            # 给上游一遍** —— 实测 310 那一发 prompt 开头就是一串：
+            #   【用户】这个是ds功能… / 【用户】继续 / 【用户】协议智普的协议改进了没
+            #   【用户】智普的工具协议改进了没… / 【用户】好吧 / 【用户】好吧 …
+            # 用户看到的就是"桥在复述我的话"。
+            #
+            # 现在改回：**k in known 就丢**，跟其它角色同一条判据。
+            # 代价（记录在此，日后要回看）：如果增量里恰好没有任务原文，模型
+            # 可能"看不见要干什么" —— 那时该由 DSH 那边保证 messages 带全，
+            # 而不是桥每轮替它重发。
             if k in known:
-                # 这个 key 发过 —— 无论本批出现几次，一律丢。
                 drop += 1
                 continue
             delta.append(m)
@@ -10763,12 +11123,42 @@ class Bridge:
         return delta, c, drop, resc, fb
 
     def _tail_items(self, items, budget):
-        """从最后一条往前取，累计字符不超过 budget。最新一条永远保留。"""
+        """从最后一条往前取，累计字符不超过 budget。
+
+        最新一条永远保留。**“真用户发言”也永远保留。**
+
+        2026-10-05 修（用户实测：「主要是裁切了 结果最后他知道吗？」
+        「为何还是有点那么不听话」）。
+
+        病（实测 payload，020 号 2026-10-05 08:18~08:19）：
+        #   旧写法是“累计超预算就 break”——**从后往前一旦撞上一个大块就彻底停下**，
+        #   前面的 user 消息（= 任务本身）连看都看不到。
+        #   实测两发异常 payload：
+        #     08:18:13  总 33,183 字  工具结果占 31,821  -> **无【用户】**
+        #     08:19:03  总 51,051 字  工具结果占 49,793  -> **无【用户】**
+        #   而同一时段 31,237 字那发**有**【用户】 —— 说明不是大小问题，
+        #   是“大块的位置”问题：它挡在了往前取的路上。
+        #
+        # 修法：超预算的条目**跳过（continue），不是停止（break）**
+        #   这样大块工具结果被跳过之后，继续往前找，
+        #   总能把 user 的话捡回来。
+        #
+        # 为什么只保 user、不保别的：
+        #   user 的话 = 任务，模型没它就不知道要干什么；
+        #   工具结果被跳过只是“没看到细节”，模型可以自己 read 回来。
+        #   且这里**不向 payload 加任何话**（用户口径：不用桥去补偿）。
+        """
+        # 2026-10-05（用户口径：「**返回结果到上游的时候请不要再复述我的话了**」）：
+        # **这里不再给 user 消息开特例** —— 超预算就跳过，跟别的条目一样。
+        #
+        # 上一版专门保 user（"任务本身，模型没它就不知道要干什么"），
+        # 配上 _delta_items 那边同一条特例，效果就是用户的话每轮重贴一遍。
+        # 两条一起改回普通判据，口径才一致（否则一边不重发、一边又塞回来）。
         out, total = [], 0
         for m in reversed(items):
             n = len(_text_of(m.get("content")))
             if out and total + n > budget:
-                break
+                continue          # 超预算的条目：跳过，不停止
             out.append(m)
             total += n
         out.reverse()
@@ -11106,6 +11496,55 @@ class Bridge:
         返回 (keys, session, parent, prompt, images)。keys 是这轮的消息指纹，
         请求成功后拿它去 remember()。
         """
+        # 2026-10-05（用户口径：「用户是正文 工具结果走附件」）：
+        # **每轮开头清空工具结果收集器。**
+        #
+        # render_turn() 把每条 role=tool 的全文墨进 LAST_TOOLRESULTS，
+        # 而 plan() 里有多条分支都会调 render_turn（稳态增量 / 固定窗口 /
+        # 全文重发）—— 不清的话，同一轮里多条分支跑过就会重复积累，
+        # 附件里会出现好几份同样的结果。
+        # build_prompt 那边自己也清一次（它不经过 plan）。
+        try:
+            del LAST_TOOLRESULTS[:]
+            _LAST_TOOLSEEN.clear()
+            del _LAST_TOOLNAMES[:]
+        except BaseException:        # noqa: BLE001
+            pass
+        # 2026-10-05（用户口径，最后一遍：「**附件是需要的时候才上传，不需要的
+        # 时候就是累赘**」）：
+        # **plan() 这条路才收集工具结果** —— 它渲染的是真·要发给 model 的 _sel。
+        # build_prompt 那条全量路会自己关掉（见那边的注释）。
+        # 结果：读 1 个文件 -> 1 份附件；读 3 个 -> 3 份；没读 -> 0 份。
+        _COLLECT_TOOLS[0] = True
+        # 2026-10-05（用户口径「只要是当次模型回复用工具读取的文档都上传」）：
+        # **算出"当次"的 tool_call_id 集合。**
+        #
+        # 做法：从 messages **末尾往前**收，遇到 assistant 的 tool_calls 就停 ——
+        # 那段（assistant 调工具 + 紧跟的 tool 结果）就是这一轮刚发生的。
+        # 不按"整个历史扫"是因为历史里每一轮都长这样，扫全量就又变成 22 份了。
+        #
+        # 收集规则：从尾部往前，凡 role=tool 的收 id；
+        # 遇到 role=assistant 且带 tool_calls 时，把它声明的 id 也收上，然后停。
+        _ids = set()
+        try:
+            for _m in reversed(list(messages or [])):
+                _r = str((_m or {}).get("role") or "")
+                if _r == "tool":
+                    _id = str((_m or {}).get("tool_call_id") or "")
+                    if _id:
+                        _ids.add(_id)
+                    continue
+                if _r == "assistant" and (_m or {}).get("tool_calls"):
+                    for _c in (_m.get("tool_calls") or []):
+                        _cid = str((_c or {}).get("id") or "")
+                        if _cid:
+                            _ids.add(_cid)
+                    break
+                break
+        except BaseException:        # noqa: BLE001
+            _ids = set()
+        _CUR_TOOL_IDS.clear()
+        _CUR_TOOL_IDS.update(_ids)
         keys, items = SessionCache.fingerprint(messages)
         # 2026-10-01 第427步：本号当前压力（限流/空回复/轮次占比），
         # 认亲时用它决定要不要放宽尾部判据。健康时恒为 0.0，行为不变。
@@ -11494,19 +11933,25 @@ class Bridge:
                 # 它自己拼 parts、不走下面那条稳态 delta ——
                 # 所以保护必须在这里也加一份，否则等于没修。
                 #
-                # 判据与去重同稳态分支：正在工具链里 + delta 里没有任务原文。
-                # 详见 active_task_block() 的注释。
-                _atb = active_task_block(messages)
-                if _atb:
-                    _joined = chr(10).join(parts)
-                    if (_real_user_text(messages) or "").strip() not in _joined:
-                        parts.insert(0, _atb)
-                        try:
-                            self.note("  ✚ 补当前任务（增量里没有）："
-                                      + (self.slug or "") + " "
-                                      + (_real_user_text(messages) or "")[:40])
-                        except Exception:        # noqa: BLE001
-                            pass
+                # 2026-10-05（用户口径「**不要让桥说 我说的啥就发啥就行**」）：
+                # **整段移除「补当前任务」。**
+                #
+                # 为什么删 —— 桥没有资格替用户判断“当前任务是什么”：
+                #   active_task_block() 取的是 `_real_user_text()`，也就是
+                #   **最后一条 user 消息**。而用户干长活时最常说的恰恰是「继续」：
+                #     最后一条 = 继续   ->  补出【当前任务】继续
+                #   于是那句"以这一句为准"反而**把真正的任务擦掉了** ——
+                #   模型手里只剩"继续"两个字，只能自己去工作区找线索。
+                #
+                # 实测（ds_bridge.log，2026-10-05 01:39~01:46，020 号）：
+                #   01:39~01:40  ✚ 补："C:\...\智普" 改造为 ...   ← 对
+                #   01:41~01:45  ✚ 补：继续                          ← 错，任务被擦掉
+                #   模型思考：「前面的任务历史没有显示具体要做什么」
+                #   工具结果里有一个 输出\象棋.html -> 模型把它当成了任务
+                #
+                # 用户口径的落点：**桥只转发用户说过的话，不自己编任务。**
+                # 用户原话是什么，payload 里就是什么；桥不解释、不纠正、不补。
+                # 「继续」就是「继续」—— 那本来就是用户说的，模型有完整历史可依。
                 # 2026-10-04 删：「补上一轮已交付」整段移除。
                 # 用户口径「连连看已完成 这个不用管他 直接删掉 一点用也没有」。
                 # 它生效过（16:38:21 那一发 payload 第 0 行就是【任务状态】），
@@ -11521,6 +11966,19 @@ class Bridge:
                 prompt = chr(10).join(p for p in parts if p.strip())
                 self.handoff_note = ""
                 self.attach_note_local = False
+                # 2026-10-05：**接链已回滚（用户实测："我都说了下游是@310…桥再发到上游
+                # id310 窗口"，而接链之后 310 开始秒回空：帧仅 1 帧 / 0.0s / 片段=[]）。**
+                #
+                # 原来的写法是 parent=None —— 上游对每个请求当**独立一发**处理，
+                # 上下文只有这一发的 prompt（实测：310 窗口已有 202 条时，桥发的那条
+                # accum=779，正好是它自己的 prompt token 数，从不累积）。
+                #
+                # 接链（parent=current_message_id）之后，上游会把整条链重新放进来 ——
+                # 而这个窗口的链上堆着 344 条消息、累计 89 万 token，远超真实上下文
+                # 上限；表现就是**上游直接秒回空**。
+                #
+                # 判定：先回滚成 None，恢复"桥自己挑内容、每发自包含"的既有行为。
+                # 链头台账（window_head_of/set）保留 —— 它只是记账，不影响发送。
                 return (keys, _fsid, None, _wh(prompt), images_in(_sel))
             # 没有登记 -> 走下面的正常认亲；认到了由 remember 登记，
             # 认不到则新建并登记（见 _ensure_group_window）。
@@ -11644,29 +12102,17 @@ class Bridge:
                               % len(_pairs))
                 except Exception:        # noqa: BLE001
                     pass
-            # 2026-10-04 修（实测：工具链第二跳起模型看不到任务）。
-            # **当前活跃任务不能因为进了 known 就从 payload 里消失。**
+            # 2026-10-05（用户口径「不要让桥说 我说的啥就发啥就行」）：
+            # **稳态分支这一份「补当前任务」同样移除。**
             #
-            # 稳态 delta 只发"上游没见过的那几条"，用户任务在第一跳发过、
-            # 第二跳起被 _delta_items 丢掉。实测第二跳 delta 只剩 1 条工具结果，
-            # payload 里没有任何任务陈述 —— 模型于是自己找任务，
-            # 被 〔本机目录〕/台账说明引去读 台账.txt。
+            # 原本这段是为了修「工具链第二跳模型看不到任务」。但它的手段是
+            # **桥自己去取一条 user 消息当“当前任务”**，而取到的往往是「继续」两个字，
+            # 于是反而把真正的任务擦掉（实测 2026-10-05 01:41~01:45 全是「✚ 补：继续」，
+            # 紧接着模型就去读了旧产物 象棋.html）。
             #
-            # 只补一行任务原文（约 30-40 字），**不重发历史**：
-            #   · 正在工具链里才补（普通聊天零变化）
-            #   · delta 已含任务原文就不补（第一跳零变化）
-            # 详见 active_task_block() 的注释。
-            _atb = active_task_block(messages)
-            if _atb:
-                _joined = chr(10).join(parts)
-                if (_real_user_text(messages) or "").strip() not in _joined:
-                    parts.insert(0, _atb)
-                    try:
-                        self.note("  ✚ 补当前任务（增量里没有）："
-                                  + (self.slug or "") + " "
-                                  + (_real_user_text(messages) or "")[:40])
-                    except Exception:        # noqa: BLE001
-                        pass
+            # 文件头那段说明里写过：这两个 block 本是一对，现在另一半
+            # （completed_task_block、【任务状态】）已按用户口径整段删掉，这一半也一并删。
+            # ==== 2026-10-05 删：补当前任务（稳态分支）====
             # 2026-10-04 删：稳态路这一份「补上一轮已交付」同样移除
             #（用户口径「直接删掉 一点用也没有」）。详见文件头部的删除说明。
             # 2026-09-24 改：尾部统一交给 tail_of —— 以前这里自己拼一遍，
@@ -11956,6 +12402,17 @@ class Bridge:
                 self.note(f"  上游限流，等 {wait:.0f}s 后第 {i} 次重试")
                 time.sleep(wait)
             try:
+                # 2026-10-05 值探针（排查"桥发就空、手发就通"）：只记录。
+                try:
+                    import pathlib as _pl2
+                    _pp2 = _pl2.Path(__file__).with_name("_ask_probe.log")
+                    with _pp2.open("a", encoding="utf-8") as _f2:
+                        _f2.write("  [bridge %s] kw.keys=%s session=%r parent=%r plen=%d files=%d\n" % (
+                            _lg_slug, sorted(kw.keys()), kw.get("session"),
+                            kw.get("parent"), len(kw.get("prompt") or ""),
+                            len(kw.get("file_ids") or [])))
+                except BaseException:
+                    pass
                 _res = self.ds.ask(**kw)
                 # 上游回的 message_id 就是台账上那个数字 —— 把它补记一行。
                 # 只在真拿到时补：回空/异常时 mid 是 None，补了反而污染台账。
@@ -12660,7 +13117,11 @@ class Bridge:
                     # 先发一条极短的：目的仅是让窗口非空（空窗口
                     # 不让改名，实测 EMPTY_CHAT_SESSION）。内容无所谓。
                     try:
-                        self.ds.ask("好", session=_ns, thinking=False)
+                        # 建窗这一发就是这条链的起点 —— 把它返回的 message id
+                        # 记成链头（用户口径：「创建窗口的时候 改完标题 取
+                        # session id 这个条件触发 不用每次都获取」）。
+                        _seed = self.ds.ask("好", session=_ns, thinking=False)
+                        window_head_set(_ns, _seed[2] if _seed else 0)
                     except Exception:        # noqa: BLE001
                         pass
                     # 2026-10-01 第440步（用户口径：「如果建的窗口名字一样
@@ -12761,8 +13222,9 @@ class Bridge:
                                 + "以上是既成事实。直接接着做，不要复述它、"
                                 + "不要重新调查整个项目。")
                             try:
-                                self.ds.ask(_feed, session=_ns, thinking=False,
-                                            quiet=True)
+                                _seed = self.ds.ask(_feed, session=_ns,
+                                                    thinking=False, quiet=True)
+                                window_head_set(_ns, _seed[2] if _seed else 0)
                                 self.note("  ⇢ 已喂养本地上下文 %d 字到新窗口「%s」"
                                           % (len(_feed), _gsgroup))
                             except BaseException as _fe:    # noqa: BLE001
@@ -12868,10 +13330,27 @@ class Bridge:
                 #
                 # 判据与 ledger_applies 同源（在不在组 = 有没有接手方）。
                 _is_fixed = not ledger_applies(getattr(self, "slug", ""))
-                if _is_fixed:
+                # 2026-10-05 修（310 号实测卡死：模型说「附件 toolout-xxx.txt
+                # 我看不到」，连续 7 轮列目录、0 轮拿到内容）：
+                # **工具结果附件不是"交接"，固定号也必须挂。**
+                #
+                # 病：这一整段原来用 `if _attach and not _is_fixed` 一刀切开，
+                # 固定号（113/310/779/309）连**工具结果**都不传；可 prompt 里的
+                # render_turn 照样写着「全文在附件 toolout-xxx.txt 里」——
+                # 于是模型看到一个**并不存在的附件**，只能反复重发同一个工具调用。
+                # 组号（020/483）走这条路，所以一直是好的。
+                #
+                # 改法：只要有工具结果就进这段；段内那几份「交接」附件各自有闸
+                # （台账 ledger_applies / 工具表 _skip_tools / 上下文 _skip_ctx），
+                # 下面再把 _is_fixed 并进那两个闸，固定号就只剩工具结果落下来。
+                _toolpre = "".join(LAST_TOOLRESULTS)
+                if _is_fixed and not _toolpre.strip():
                     self.note("  附件：固定号不交接 —— 跳过整条附件路"
                               "（检查点/上下文/工具表/台账 都不挂）")
-                if _attach and not _is_fixed:
+                elif _is_fixed:
+                    self.note("  附件：固定号不交接，但**工具结果必须挂**"
+                              "（否则 prompt 指向一个不存在的附件）")
+                if (_attach and not _is_fixed) or _toolpre.strip():
                     # 三份附件：上下文 / 工具表 / 台账。体检已过（见上面 _attach 的判定），
                     # 这里才是生成与上传 —— 顺序就是用户口径：先体检、再过门、最后生成上传。
                     # 2026-10-03（用户口径「删掉」）：**不再用占位。**
@@ -12888,7 +13367,7 @@ class Bridge:
                     # 每轮触发压缩 -> 历史重写 -> 指纹全变 -> 认亲失败 -> 开新会话又
                     # 挂全量）。session 为空 = 新会话 / 换号接手，上游没有这份历史，
                     # 照旧挂全量。
-                    _skip_ctx = bool(_local_attach or session)
+                    _skip_ctx = bool(_local_attach or session or _is_fixed)
                     # 2026-10-01 第425步（用户口径「你说的是每次只发一次工具表 除非
                     # 换号 那可不可以理解为 每次只发一次检查点换号之前不用一直发呢」）：
                     # **续接同一上游会话时，工具表也不挂。**
@@ -12906,7 +13385,7 @@ class Bridge:
                     #
                     # 只在**开新会话 / 换号接手**（session 为空）时才挂：
                     # 那时上游确实没有这份表，必须给。
-                    _skip_tools = bool(session)
+                    _skip_tools = bool(session or _is_fixed)
                     # 2026-10-04：**固定号不挂台账。** 台账是轮询体系的东西
                     # （组内多号接力，要告诉接手方做到哪一步），固定号没有
                     # 接手方 —— 详见 ledger_applies()。实测固定号 309 被灌台账后
@@ -12923,6 +13402,54 @@ class Bridge:
                         self.note("  附件：跳过 工具表.txt（续接同一上游会话，"
                                   "上游已有），省 " + str(len("".join(LAST_TOOLS)))
                                   + " 字")
+                    # 2026-10-05（用户口径：「**用户是正文 工具结果走附件**」
+                    # 「就是一个字 只要是结果就发附件 先测试下效果」）：
+                    # **工具结果全部走附件，正文里一个字不留。**
+                    #
+                    # 病（实测 payload，020 号 2026-10-05 08:18）：
+                    #   一发 33,183 字里工具结果占 31,821（96%），
+                    #   用户的话被挤得一字不剩 → 模型不知道要干什么。
+                    #
+                    # 为什么用附件而不是分块发：桥现成的 _upload_attach 已经测过
+                    #   「60 万字历史进附件、inline 只 260 字，多跳任务 3/3 全对」。
+                    #   模型能直接读附件，不需要桥分次发。
+                    # 一份结果一个附件（用户口径：「一个命令返回一个附件」）。
+                    # 每份各自带标识名（_LAST_TOOLNAMES），这样模型能区分
+                    # “这份是哪一轮的结果”。
+                    _toolblob = "".join(LAST_TOOLRESULTS)
+                    if _toolblob.strip():
+                        # 2026-10-05（用户口径：「得告诉他这是他运行的结果」）：
+                        # **附件开头就说清它是什么** —— 模型打开附件的第一眼
+                        # 就得知道“这是我自己调工具的结果”，而不是用户发来的资料。
+                        _toolblob = (
+                            "【本文件是「助手自己调用工具」的运行结果】"
+                            + chr(10)
+                            + "不是用户发来的资料，也不是新任务。它就是你上一步调用工具后"
+                            + "本机执行出来的原始输出（可能含目录、文件内容、命令回显等）。"
+                            + chr(10)
+                            + "工具名就写在每段的【工具结果（xxx）】标题里。需要看细节就读下去，"
+                            + "不要为了看它而重新发起同一个工具调用。"
+                            + chr(10) + chr(10) + "=" * 60 + chr(10) + chr(10)
+                            + _toolblob)
+                        # 每份结果各成一个附件（名字 toolout-<ident>.txt）。
+                        for _i, _one in enumerate(LAST_TOOLRESULTS):
+                            _nm = (_LAST_TOOLNAMES[_i]
+                                   if _i < len(_LAST_TOOLNAMES) else str(_i))
+                            _docs = (("toolout-" + str(_nm),
+                                      "【我刚刚自己执行工具的产物】"
+                                      + chr(10)
+                                      + "这是我（助手）上一步自己发起的工具调用，"
+                                      + "由本机执行完后返回的原始输出。"
+                                      + chr(10)
+                                      + "不是用户发来的资料，也不是新任务 —— 它是我自己动作链上的一环。"
+                                      + chr(10)
+                                      + "按顺序做：① 把它读完；② 用一两句说清这次拿到了什么"
+                                      + "（写进回复，留给下一轮）；③ 再决定下一步。"
+                                      + "**不要重发同一个调用。**"
+                                      + chr(10) + chr(10) + "=" * 60 + chr(10) + chr(10)
+                                      + _one),) + _docs
+                    else:
+                        self.note("  附件：本轮无工具结果")
                     if not _skip_ctx:
                         _docs = (("上下文", _ctx),) + _docs
                     else:
@@ -13244,6 +13771,7 @@ class Bridge:
             # 结果是该计的没计、计数全乱。现在一律计。
             self.turns_here += 1
             self.cache.remember(keys, sid, mid)
+            window_head_set(sid, mid)
             emit("turn", slug=getattr(self, "slug", ""),
                  model=model,
                  turns_here=self.turns_here, sid=sid,
@@ -13424,6 +13952,7 @@ class Bridge:
                 Bridge.EMPTY_KEEP += 1
                 self.last_empty = "keep"       # 值得让 dsh 压一次再试
                 self.cache.remember(keys, sid, mid)
+                window_head_set(sid, mid)
                 self.note(f"  空回复，但这一发很大（客户端 {whole} 字 / "
                           f"本次只发 {len(prompt)} 字 / {len(images)} 图），"
                           f"保留会话 {sid}，下一轮只发增量，别重开窗口")
@@ -13441,6 +13970,7 @@ class Bridge:
                 self.last_empty = "dropped"      # 频繁限流：保留会话，下一轮只发增量
                 self._empties.pop(sid, None)
                 self.cache.remember(keys, sid, mid)
+                window_head_set(sid, mid)
                 self.note(f"  一个片段都没有（第 {times} 次），按频繁限流保留会话 {sid}，"
                           f"下一轮只发增量，不重开窗口")
                 emit_reply("empty", getattr(self, "slug", ""), sid, "",
@@ -16099,6 +16629,33 @@ class Handler(BaseHTTPRequestHandler):
 
     def _write(self, raw):
         """写不出去就重试几次，再不行才放弃并让上游提前断流。"""
+        # 2026-10-05 帧探针（排查"客户端转圈、finish_reason 没到"）：
+        # **记下每一帧的类型和长度**。只为分清两种可能：
+        #   ① 桥根本没写这一帧（代码没走到）
+        #   ② 桥写了但 write/flush 失败（对面断了）
+        # 纯记录，不影响任何逻辑；写探针失败绝不带塌请求。
+        try:
+            import pathlib as _pl3
+            _s = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) else str(raw)
+            _kind = "?"
+            if "tool_calls" in _s and "delta" in _s:
+                _kind = "delta.tool_calls"
+            elif "finish_reason" in _s and "\"finish_reason\": null" not in _s:
+                _kind = "FINISH"
+            elif "[DONE]" in _s:
+                _kind = "DONE"
+            elif "content" in _s:
+                _kind = "delta.content"
+            elif "reasoning_content" in _s:
+                _kind = "reasoning"
+            _pp3 = _pl3.Path(__file__).with_name("_frame_probe.log")
+            with _pp3.open("a", encoding="utf-8") as _f3:
+                _f3.write("%s %-18s len=%d dead=%s | %s\n" % (
+                    time.strftime("%H:%M:%S"), _kind, len(_s),
+                    getattr(self, "_dead", False),
+                    _s.replace(chr(10), " ")[:400]))
+        except BaseException:
+            pass
         for i in range(self.WRITE_TRIES):
             try:
                 self.wfile.write(raw)
@@ -17006,15 +17563,60 @@ class Handler(BaseHTTPRequestHandler):
             buf = "".join(live)
             if not buf:
                 return
+            # 2026-10-05（用户口径：「怎么还是被桥截了」）：**判据从"见到```就截"
+            # 改成"标记后面真的跟着调用才截"。**
+            #
+            # 病（310 号实测，三发全被误伤）：
+            #   12:50:15  866 字 -> 边发只吐 331 字
+            #   12:59:18  895 字 -> 边发只吐  36 字（围栏在第 4 行，一刀砍掉 96%）
+            #   正文里那对 ``` 只是它在**引用一段代码/一段输出**，跟工具调用
+            #   毫无关系。可 STREAM_HOLD=("```",...) 一见到就停，
+            #   停下来的部分只能等收尾补 —— 而收尾补发时客户端往往已经不听了。
+            #
+            # 真正要防的只有一件事：**别把半个工具调用 JSON 当正文吐出去**。
+            # 所以这里逐处检查：每个标记往后 window 字内，有没有真调用特征。
+            #   {"tool_calls"  /  <invoke name=  /  "name":"xxx","arguments"
+            # 有 -> 从那里截（保持原行为，防半截 JSON）；
+            # 没有 -> 它不是调用，继续往前吐。
+            #
+            # 回放五发历史（判据分开得干净）：
+            #   12:50:15 866  -> 旧吐331 新吐842   （散文围栏，救回）
+            #   12:59:18 895  -> 旧吐 36 新吐871   （散文围栏，救回）
+            #   12:19:20 1357 -> 旧吐142 新吐142   （真调用，照旧截）
+            #   12:39:02 3878 -> 旧吐 47 新吐 47   （真调用，照旧截）
+            #   12:40:23 1263 -> 旧吐345 新吐345   （真调用，照旧截）
             cut = len(buf)
             for m in STREAM_HOLD:
                 i = buf.find(m)
-                if 0 <= i < cut:
-                    cut = i
+                while i >= 0:
+                    if i >= cut:
+                        break
+                    if _CALL_HINT.search(buf[i:i + _CALL_WIN]):
+                        cut = i
+                        break
+                    i = buf.find(m, i + 1)
             if not force:
                 keep = max(0, cut - STREAM_KEEP)
             else:
-                keep = cut
+                # 2026-10-05 修（证据：310 号 12:19:20，1357 字只送出 166）。
+                # **收尾这一跳是"最后机会"，不能再按标记截断。**
+                #
+                # 病：`force=True` 原来只把 keep 从 `cut-24` 改成 `cut` ——
+                # 而 `cut` 本身就是**在 STREAM_HOLD 标记处截出来的**。
+                # 于是收尾照样从标记处落地：模型正文里只要出现一个 ``` 围栏
+                # （哪怕那围栏只是它在引用一段代码，跟工具调用毫无关系），
+                # 围栏之后的所有正文**永远送不出去**。
+                # 实测那一条：1357 字 -> 送达 166 字，缺的 1191 字全在围栏之后。
+                #
+                # 而且这不是偶发：同文件 17461 的注释自己记着
+                #   「日志「正文送达客户端」218 次里 132 次一个字没发 /
+                #     单日 62/64 没发出去」。
+                #
+                # 为什么 force=True 就该整段吐：此刻**流已经收完**，
+                # 上游不会再追加任何字符。"标记之后可能紧跟调用"这个顾虑
+                # 已经由调用方自己判完了（收尾那段按 calls/prose 分开处理），
+                # 这里再截一次只有截断正文这一个作用。
+                keep = len(buf)
             if keep <= 0:
                 return
             _emit_text(buf[:keep])
@@ -17053,11 +17655,30 @@ class Handler(BaseHTTPRequestHandler):
             #   ④ 症状：日志「正文送达客户端」218 次里
             #        一个字没发 132 / 零个完整送达 / 单日 62/64 没发出去。
             #
-            # 现在：**正文照常边收边吐**。_flush_live 本来就留了
-            # STREAM_KEEP(24) 字的安全边界 —— 那 24 字正好够判断"后面是不是
-            # 紧跟一个调用"。收尾若确认是"前言 + 调用"，再决定要不要吞掉
-            # 那截还没吐出去的前言（见收尾那段）。已经吐出去的不追回。
-            _flush_live()
+            # ===== 2026-10-05 根治（用户口径：「不希望打补丁，我希望根治」）=====
+            # **带工具的这一轮，正文不边收边吐。**
+            #
+            # 为什么回滚掉 2026-10-04 那次"照常边收边吐"：那次是为了救一个
+            # 计数（「218 次里 132 次一个字没发」）—— 但那个计数是**旧版的统计**，
+            # 而它换来的代价是：**上游吐 "```json {\"tool_calls\"…" 的那一瞬间，
+            # 桥就把它当正文发给了客户端**；等收完解析出"这是工具调用"时，
+            # 客户端早就收到那一段了。
+            #
+            # 实测证据（本轮 _frame_probe.log，14:24:47 桥写回的帧）：
+            #   delta.content    = "```json\n{\"tool_calls\": [{\"name\": \"run_code\"…"
+            #   delta.tool_calls = [{"index":0,"id":"call_0_…"}]
+            #   finish_reason    = "tool_calls"
+            # 客户端同时收到"一段正文"和"一个工具调用" → 它不知道该按文本还是
+            # 按调用处理 → 界面一直转圈。
+            #
+            # 而那段"正文"**不可能靠收尾时不发 prose 来解决** —— 它已经在
+            # 边发阶段出去了（我上一版改掉 prose 之后 content 依旧存在，即为此证）。
+            #
+            # 所以判据只能放在这条边发口上：**tools 非空就一律不边发**，
+            # 收完由收尾统一裁决（有调用 -> 只发 tool_calls；没调用 -> 整段发）。
+            # 纯聊天（tools 为空）走 _streamed，边发照旧，不受影响。
+            if not tools:
+                _flush_live()
 
         def _unsent_tail(body, sent):
             """正文里还没吐出去的那一段。
@@ -17079,9 +17700,15 @@ class Handler(BaseHTTPRequestHandler):
                 k += 1
             return body[k:]
         def _peek_safe():
-            """收完了：把还没吐的正文里安全的部分冲出去。"""
+            """收完了：把还没吐的正文全部冲出去。
+
+            2026-10-05 改（用户报「我问 310 他怎么没回复」）：
+            原来写的是「有标记则只吐标记之前那段」—— **那正是丢正文的那一刀**。
+            实测：模型答了 1357 字，里面只是引用了一段 ```python 代码，
+            围栏之后 1191 字全被留在了 live 里，最后送达 166/1357。
+            收尾时流已结束，标记不再有任何判据价值，整段吐出去就对了。
+            """
             _flush_pend(force=True)
-            # 收尾时若整段正文里没有任何标记，就全吐；有标记则只吐标记之前那段。
             _flush_live(force=True)
 
         try:
@@ -17153,10 +17780,12 @@ class Handler(BaseHTTPRequestHandler):
             except BaseException:        # noqa: BLE001
                 pass
         if tools and not calls:
-            # 留个证据：模型可能又换了一种工具调用写法，不记下来没法补解析
-            self.bridge.note("  ⚠ 给了工具但没解析出调用，原文："
+            # 2026-10-05（用户口径：「**把给了正文没代码的那个功能直接去掉**」）：
+            # **只留日志这一行的证据，正文一个字都不改。**
+            # 理由同 _responses 那处：salvage() 会把整段正文换成桥写的模板，
+            # 那是桥在替模型说话。桥只转发，判"这轮算不算干活"是 dsh 的事。
+            self.bridge.note("  ⚠ 给了工具但没解析出调用（正文原样转发），原文："
                              + repr((text or "")[:600]))
-            text = salvage(text, tools)
 
 
         else:
@@ -17273,7 +17902,22 @@ class Handler(BaseHTTPRequestHandler):
         # 原来 PTC 下跳过这一冲（留给下面"是不是过程叙述"那条判断），
         # 结果是模型写的那句"我来写一个完整的消消乐游戏…"永远到不了用户眼前。
         # 现在协议明确要求它先写这句话当进度，就必须让它出去。
-        _flush_live(force=True)          # 把边界之外的残留冲出去
+        # 2026-10-05：这一跳是**补齐正文的最后机会** —— 里面一定要是 force=True
+        # （force 才不按 STREAM_HOLD 截断，见 _flush_live 里那段注释）。
+        # 实测：1357 字的正文因为一个 ``` 围栏只送出 166 字，就是这里漏的。
+        # 2026-10-05（用户实测：「**主要是没看到 dsh 执行工具的痕迹**」）：
+        # **这一跳也必须按 tools 判 —— 它就是漏网的那一处。**
+        #
+        # 证据（真实 SSE，同一发里两帧并存）：
+        #   delta.content    = "```json\n{\"tool_calls\": [{\"name\": \"run_code\"…"
+        #   delta.tool_calls = [{"index":0,"id":"call_0_…","type":"function",…}]
+        # 客户端看到 content 非空 -> 判这一轮是"文本回复"，把那段 JSON 当文字显示，
+        # 工具调用被忽略 -> **不执行** -> 界面看不到任何执行痕迹、一直等。
+        #
+        # 上一轮我只堵了 on_delta 里那次 _flush_live()，收尾这一次（force=True）
+        # 不受保护，照样把 live 里的残留吐了出去。这里补齐。
+        if not tools:
+            _flush_live(force=True)          # 把边界之外的残留冲出去
         sent_so_far = "".join(sent_text)
         # 2026-10-03（用户报「窗口不显示他说话」）：
         # **收尾这一跳到底成没成，日志里必须有一句话。**
@@ -17282,34 +17926,63 @@ class Handler(BaseHTTPRequestHandler):
         # 这里把「本段有没有送达 + 谁挡的」合成一条，判据是写 socket 的返回值。
         _ok_w = True
         if calls:
-            # 调用之外的那段说明文字也要发出去，否则客户端只看得到思考和命令。
-            # 已经吐过的部分不重发。
+            # ===== 2026-10-05 根治（用户口径：「**不希望打补丁，我希望根治**」）=====
+            # **有工具调用的一轮，正文一个字都不发。**
             #
-            # 2026-10-04 **最终定稿**：**调用前的那句正文一律发出去。**
+            # ## 根是什么
+            #   `prose` 是 `split_calls()` 切出调用之后**剩下的那一坨**。
+            #   桥一直把它当"给用户看的进度说明"发出去 —— 可它**不是内容，
+            #   是切割的副产品**：切得干净时是「我来写一个消消乐…」，
+            #   切不干净时就是 ` ```json {"tool_calls": …} ``` ` 这段残渣本身。
+            #   把副产品当正文发，就是"桥替模型说话"的最后一块。
             #
-            # 这已经是这条规则的第三个版本了，前两个都错在一个地方 ——
-            # 都是在替用户决定"这段正文值不值得看"：
-            #   ① live[:] = []（PTC 全丢）-> 正文一个字都发不出（送达 0/N）
-            #   ② _ptc 且未送出才丢        -> 仍然吞掉「我来写一个消消乐…」
-            #      这种**模型主动交代的进度**（用户要的正是它）
+            # ## 实测证据（本轮抓的 SSE 原始帧，_frame_probe.log）
+            #   14:24:47 桥写回客户端的帧：
+            #     delta.content      = "```json\n{\"tool_calls\": [{\"name\": \"run_code\"…"
+            #     delta.tool_calls   = [{"index":0,"id":"call_0_…"}]   ← 正确
+            #     finish_reason      = "tool_calls"                    ← 正确
+            #   **content 那段就是 prose 残渣** —— 客户端同时收到"一段正文"和
+            #   "一个工具调用"，行为就不确定（界面一直转圈）。
             #
-            # 而实测被吞掉的 9 次里，**没有一次是真"过程叙述"**：
-            #   {"tool_calls": [ / ```json 围栏 / 【助手】 / 桥注入的协议被复述
-            # 也就是说这条规则几乎只在误吞。
+            # ## 为什么"不发"是安全的
+            #   模型真想留一句给用户看的话，那话会在**正文**里、和调用分开 ——
+            #   那种轮次走下面 else 分支（没有调用），整段照发。
+            #   这一条分支的前提是"这一轮产出了工具调用"= 它选择**动手**，
+            #   动手就动手，不夹带桥判定过的解释。
             #
-            # 现在协议改成了「先说一句，再动手」（见 PTC_PROTOCOL），
-            # 那句话是**给用户看的进度**，必须让它出去 ——
-            # 所以这里不再做任何吞并判断，只补发还没送出的部分。
-            _unsent_prose = _unsent_tail(prose, sent_so_far)
-            if _unsent_prose:
-                _ok_w = self._write(chunk(model, {"content": _unsent_prose})) and _ok_w
-            _ok_w = self._write(chunk(model, {"tool_calls": calls})) and _ok_w
-            _ok_w = self._write(chunk(model, {}, "tool_calls")) and _ok_w
+            # ## 上一版为什么留着它（留个记录，别再回头）
+            #   注释里写着「模型主动交代的进度，用户要的正是它」。
+            #   但同一段注释自己也记着：「实测被吞掉的 9 次里，**没有一次
+            #   是真过程叙述**」—— 被吞的全是 ```json 围栏 / {"tool_calls" /
+            #   桥注入的协议复述。也就是说这条规则**从来只在误发**。
+            # 2026-10-05（用户实测：「**转圈什么都没有**」，根因在 dsh 侧）：
+            # **工具调用帧和 finish_reason 帧必须一次写出。**
+            #
+            # dsh 的判据（node_modules/@earendil-works/pi-ai/dist/api/
+            # openai-completions.js:500）：
+            #     if (compat.supportsFinishReason && !hasFinishReason)
+            #         throw new Error("Stream ended without finish_reason");
+            # 而 supportsFinishReason 的默认值就是 true（同文件 :1282）。
+            # 也就是说：**流里没有 finish_reason，整轮直接作废** ——
+            # 工具调用会被丢掉，客户端什么都不做（界面一直转圈）。
+            #
+            # 实测（_frame_probe.log，483 号 14:50:01）：
+            #     delta.tool_calls  dead=False   ← 调用帧写成功
+            #     delta.tool_calls  dead=True    ← finish_reason 帧写失败
+            #     DONE              dead=True
+            # 分两次写时，客户端读完第一帧就走自己的流程/或提前收流，
+            # 第二帧扑空 —— 于是它永远等不到 finish_reason。
+            #
+            # 合成一次写：两帧在同一个 TCP 段里到达，谁也插不进来。
+            _ok_w = self._write(
+                chunk(model, {"tool_calls": calls})
+                + chunk(model, {}, "tool_calls")) and _ok_w
         else:
+            # 同上：正文尾段和 finish_reason 也一次写出（理由见 if 分支那段）。
             _rest = _unsent_tail(text or "", sent_so_far)
-            if _rest:
-                _ok_w = self._write(chunk(model, {"content": _rest})) and _ok_w
-            _ok_w = self._write(chunk(model, {}, "stop")) and _ok_w
+            _tail = (chunk(model, {"content": _rest}) if _rest else b"") \
+                + chunk(model, {}, "stop")
+            _ok_w = self._write(_tail) and _ok_w
         self._write(chunk(model, usage=used))
         self._write(b"data: [DONE]\n\n")
         _body_n = len((prose if calls else (text or "")) or "")
@@ -17398,9 +18071,18 @@ class Handler(BaseHTTPRequestHandler):
             except BaseException:        # noqa: BLE001
                 pass
         if tools and not calls:
-            self.bridge.note("  ⚠ 给了工具但没解析出调用，原文："
+            # 2026-10-05（用户口径：「**把给了正文没代码的那个功能直接去掉**」）：
+            # **只记日志，不再改 text。**
+            #
+            # 原来这里 `text = salvage(text, tools)` —— 而 salvage() 在
+            # looks_truncated() 为真时会把**整段正文换成桥写的一段模板**
+            # （SALVAGE_NOTE：「[桥接] 这一轮的工具调用没能解析出来…」）。
+            # 那是桥在替模型说话 —— 用户看到的是桥的话，不是模型的。
+            #
+            # 桥的职责是转发：模型说什么就发什么。判「这轮算不算干活」是
+            # dsh 的事（dsh-agent-loop 自己有判据），桥不替它判、也不改字。
+            self.bridge.note("  ⚠ 给了工具但没解析出调用（正文原样转发），原文："
                              + repr((text or "")[:600]))
-            text = salvage(text, tools)
 
         elif calls and any(c["function"]["arguments"] in ("{}", "")
                            for c in calls):
@@ -17491,9 +18173,10 @@ class Handler(BaseHTTPRequestHandler):
         if cot:
             emit_reasoning(len(output), cot)
         if calls:
-            # 调用之外的那段说明文字也要发出去，排在 function_call 前面
-            if prose:
-                emit_text(len(output), prose)
+            # 2026-10-05 根治（与 _buffered 同一判据）：**有工具调用的一轮，正文一个字都不发。**
+            # prose 是 split_calls() 切出调用后剩下的残渣，不是"给用户看的进度"
+            # —— 切不干净时它就是 "```json {\"tool_calls\": …}" 本身。
+            # 详见 _buffered 里那段长注释（含 SSE 原始帧证据）。
             for i, c in enumerate(calls, len(output)):
                 item = {"id": "fc_" + _short_id(), "type": "function_call",
                         "status": "completed",
