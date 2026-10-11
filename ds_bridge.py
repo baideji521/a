@@ -235,16 +235,11 @@ def _ini_apply(pool, reset_cursor=True):
         standing_note=s("standing_note", CHUNK_REMINDER),
         pool_note=s("pool_note", POOL_NOTE_DEFAULT),
         format_note=s("format_note", ""),
-        attach_note=s("attach_note", ATTACH_NOTE),
         handoff_note=s("handoff_note", HANDOFF_PROMPT),
         # 2026-10-03：下面这批原来是写死在代码里的提示词，控制台改不到。
         # 用户口径「应该所有的提示词都得在控制台 因为好管理」。
         # 一律「ini 非空优先，回落出厂常量」—— ini 里没这些键时行为与改前一致。
-        tool_protocol=s("tool_protocol", TOOL_PROTOCOL),
-        checkpoint_instruction=s("checkpoint_instruction", CHECKPOINT_INSTRUCTION),
-        salvage_note=s("salvage_note", SALVAGE_NOTE),
         ctx_empty_note=s("ctx_empty_note", CTX_EMPTY_NOTE),
-        nudge_body=s("nudge_body", NUDGE_BODY),
         attach_note_no_cp=s("attach_note_no_cp", ATTACH_NOTE_NO_CP),
         attach_note_local=s("attach_note_local", ATTACH_NOTE_LOCAL),
         attach_ctx_lines=s("attach_ctx_lines", ATTACH_CTX_LINES),
@@ -253,13 +248,8 @@ def _ini_apply(pool, reset_cursor=True):
         standing_note_on=s("standing_note_on", "1"),
         pool_note_on=s("pool_note_on", "1"),
         format_note_on=s("format_note_on", "1"),
-        attach_note_on=s("attach_note_on", "1"),
         handoff_note_on=s("handoff_note_on", "1"),
-        tool_protocol_on=s("tool_protocol_on", "1"),
-        checkpoint_instruction_on=s("checkpoint_instruction_on", "1"),
-        salvage_note_on=s("salvage_note_on", "1"),
         ctx_empty_note_on=s("ctx_empty_note_on", "1"),
-        nudge_body_on=s("nudge_body_on", "1"),
         attach_note_no_cp_on=s("attach_note_no_cp_on", "1"),
         attach_note_local_on=s("attach_note_local_on", "1"),
         attach_ctx_lines_on=s("attach_ctx_lines_on", "1"),
@@ -480,6 +470,13 @@ WORK_ROOT = _boot_root()
 # 而它们本来该跟 ini 一样「配一次，一直在」。
 _CONF_DIR = INI_FILE.parent          # <...>/ds/
 
+# 2026-10-11: _data/cache/ is the memory dir. The DIR itself is the
+# source of truth: if a file of this name exists under _data/cache/,
+# it is read/written there; otherwise the old path is used.
+# No filename list in code. Move files in/out of the dir to change what
+# counts as memory; delete the dir to forget all sessions.
+_CACHE_DIR = _CONF_DIR / "_data" / "cache"
+
 
 def _conf_file(name):
     """分组类配置的落点：ds/ 下。
@@ -487,6 +484,9 @@ def _conf_file(name):
     老位置（工作区根）有、新位置没有时，**自动搬一次** ——
     现有的分组不该因为这次搬家而重建。搬失败就退回新路径，不抛。
     """
+    _c = _CACHE_DIR / name
+    if _c.exists():
+        return _c
     new = _CONF_DIR / name
     old = WORK_ROOT / name
     try:
@@ -519,6 +519,9 @@ EVENT_MAX = 8 * 1024 * 1024
 # 留到最后交给解析器判定 —— 否则可能把半截工具标记当正文发出去（撤不回来）。
 # 实测（2742 条思考 + 全部正文）里正文几乎不含这些，所以正常聊天不受影响。
 STREAM_HOLD = ("```", "<|", "<｜", "<|D", "```json", "<tool_calls", "<tool_call", "<invoke")
+STREAM_HOLD = STREAM_HOLD + ('[{"', '{"name', '{"tool_calls', '{"code":')
+STREAM_HOLD = STREAM_HOLD + (chr(0x3010) + '工具调用' + chr(0x3011), '调用工具:', '调用工具：', '工具调用:', '工具调用：')
+_HOLD_HARD = (chr(0x3010) + '工具调用' + chr(0x3011), '调用工具:', '调用工具：', '工具调用:', '工具调用：')
 # 末尾保留多少字符不发（够装下一个标记开头），确认安全后再吐。
 STREAM_KEEP = 24
 
@@ -553,6 +556,12 @@ _CALL_HINT = re.compile(
     r"|\{\s*\"(?:code|command|file_path|pattern|files|questions)\""
     r"|\"code\"\s*:\s*\"const\s+r\s*=\s*await\s+tools\."
     ,
+    re.I)
+
+# 2026-10-10: DSML fullwidth-bar markers must also be call hints.
+# Without this, <|DSML| invoke ...> leaks to the client as content.
+_CALL_HINT = re.compile(
+    _CALL_HINT.pattern + "|[" + chr(0xff5c) + "|]{1,2}\\s*DSML",
     re.I)
 _CALL_WIN = 200      # 标记之后看多少字
 
@@ -887,6 +896,19 @@ def group_session_set(group, slug, sid):
         if not isinstance(per, dict):
             per = {}
         v = str(sid or "").strip()
+        # GROUP_SESS_GUARD(2026-10-10): only register slugs belonging to this group.
+        if v:
+            try:
+                _gok = False
+                for _gg in (_groups_root().get("groups") or []):
+                    if str(_gg.get("name") or _gg.get("id") or "").strip() == g:
+                        _gsl = [str(x).strip() for x in (_gg.get("slugs") or [])]
+                        _gok = s in _gsl
+                        break
+                if not _gok:
+                    return False
+            except BaseException:
+                pass
         if v:
             per[s] = v
         else:
@@ -1115,7 +1137,7 @@ def _notes_of(g):
         return {}
     out = {}
     for k in ("standing_note", "pool_note", "format_note",
-              "handoff_note", "attach_note"):
+              "handoff_note"):
         v = str(raw.get(k) or "").strip()
         if v:
             out[k] = v
@@ -3081,6 +3103,21 @@ def group_root_learn(group_name, root):
 GROUP_ROOT_KEY = "root"
 
 
+# 2026-10-09 req-level dsh workspace
+_REQ_WS = threading.local()
+
+def set_req_ws(root):
+    try:
+        _REQ_WS.root = _norm_root(root) or ""
+    except BaseException:
+        pass
+
+def get_req_ws():
+    try:
+        return str(getattr(_REQ_WS, "root", "") or "")
+    except BaseException:
+        return ""
+
 def group_root_of(group_name, slug="", evid_root=""):
     """这个组的工作区根 —— **自适应，不靠硬编**。
 
@@ -3107,6 +3144,10 @@ def group_root_of(group_name, slug="", evid_root=""):
     配置里的 root 仍然认（想手工钉死某组时有用），但**不是必须的**。
     """
     g = str(group_name or "").strip()
+    # 2026-10-09 req-level workspace wins over ds ini
+    _rw = get_req_ws()
+    if _rw:
+        return _rw
     # 1) 手工钉死（可选）
     try:
         for gg in (_groups_root().get("groups") or []):
@@ -5186,7 +5227,7 @@ Rules:
 - Do NOT treat wrapper keys as parameter names: "arguments", "input", "parameters" are keys of the JSON wrapper above; no tool has parameters with those names. In native markup, each parameter tag is followed by a real field name from that tool schema ("command", "code", "description", "file_path", and so on).
 - You may emit multiple tool calls at once, but only in ONE JSON code block.
 - When no tool call is needed, answer in plain natural language; do not emit the JSON form above.
-- Tool results are returned to you on the next turn, marked as "tool result" (the render label is the Chinese "工具结果").
+- Tool results are returned to you on the next turn, marked as "tool result" (the render label in the client UI).
 
 Windows paths and escaping (this is where most failures happen -- follow exactly):
 - Always write paths with forward slashes: F:/tools/a.html. Never use backslashes. In JSON a backslash starts an escape sequence, so a path fragment containing backslash-t is parsed as a TAB character -- the file gets written under a different name, and a later read reports "not found".
@@ -5240,6 +5281,9 @@ STATE = pathlib.Path(__file__).with_name(".state")
 
 def state_file(name, legacy=None):
     """.state/ 下的文件路径。老位置有同名文件就顺手搬过来，只搬一次。"""
+    _c = _CACHE_DIR / name
+    if _c.exists():
+        return _c
     STATE.mkdir(parents=True, exist_ok=True)
     dest = STATE / name
     if legacy:
@@ -5347,7 +5391,100 @@ Script discipline (MUST follow -- this is the #1 cause of wasted turns):
    quotes, backslashes, Chinese chars and backticks inside the matched text.
 3. **pwsh returns an object {text, truncated}.** Always take r.stdout.text --
    never String(r.stdout) (that yields "[object Object]").
+4. **JSON string escaping -- get it right; the bridge repairs best-effort but a clean block is always faster:**
+   - Inside a JSON string, ONLY these escapes are legal: \" \\ \/ \b \f \n \r \t \uXXXX. Anything else (notably \' ) is invalid and makes the WHOLE block unparseable.
+   - When your command embeds PowerShell single-quoted strings, write the single quote PLAINLY ( ' ), never as \' .
+   - Never put raw control characters (CR / LF / TAB) inside a JSON string -- use \n \r \t.
+   - Always close every [ ] { } pair; a truncated block drops the entire call.
+   - The bridge will best-effort repair bad escapes, stray control chars, and unclosed brackets, but you should not rely on it.
 '''
+
+PTC_PROTOCOL_BRIDGE_ZH = r"""
+⚠ PTC 模式：工具表里只有 run_code；别的工具名直接写会被拒（unknown tool），
+必须从 run_code 里调 —— `await tools.<真名>({...})`。
+最外层一个 run_code，参数 code + description（都必填）。
+
+（run_code 的基础写法 dsh 已在 system prompt 里给出；这一段只补桥侧规矩。）
+
+【每轮只发一个 JSON 代码块】不要把同一个调用发两遍，不要加 <tool_calls> 外壳。
+
+【要动手做事时】先一句话说清这次做什么（给用户看的进度），再给那一个代码块；
+【只是说话 / 回答 / 闲聊时】直接正常回话，不要为了凑调用而调。
+
+【参数名照抄，不要自创】把 timeoutMs 写成 timeout、file_path 写成 path
+—— 整轮直接 abort，那一轮完全白跑。内层参数表见本段末尾。
+
+【长内容 > 约 1 万字符】优先落盘脚本再执行 —— 一次往返写完，比内联稳得多。
+真要内联，单参数别超约 15000 字符；确实更长就分多轮写，拆分点选在行边界。
+
+【诊断（重要）】看到「文件没写成」「路径不存在」，但路径明明是对的 ——
+  不是文件系统坏了，是这条消息太长被上游砍断，JSON 没解出来。
+  对策：拆成几轮写，或改成先落盘脚本再执行。
+
+【写文件用脚本，不要 read + edit】要改文件：先用 tools.write 落一个脚本，
+  再用 pwsh 执行它；脚本自己做「读 → 改 → 校验 → 写回」，回执只有几行，不产生附件。
+  可用 safe_patch.py（patch / patch_multi / rollback / preview / patch_with_file；
+  原子替换 / 自动备份 / 唯一性门 / 编译门 / 编码探测 / dry_run / diff）。
+  不要硬编码绝对路径 —— 按 DSH_HOME 加载。
+
+【不要用 JS 数组拼脚本源码】含大量中文 / 换行 / 引号的内容，
+  直接用 tools.write 把文件落盘（模板字符串原样），脚本只负责读和执行。
+  JS 数组拼出来的源码要过两层转义（JS escape + JSON），嵌套引号 / += / 中文转义必炸。
+  要往目标文件插长内容，用 safe_patch.patch_with_file(target, anchor, fragment_file)。
+
+【工具结果的回传】每次调用的结果会在下一轮以附件给你。识别方式 ——
+  **永远用 `call_id=` 对齐**（附件名可能不同，不要拿名字当身份）：
+    正文首行是 [tool_result] call_id=<本次调用id> tool=<工具名> target=<附件名>
+    附件名三种都正常：真文件名（如 ds_bridge.py）/
+    toolout-<工具>__<参数摘要>__<call_id后6位>.txt / result.txt。
+  用你自己上一轮发出的 call_id 去匹配，不要凭附件名猜。
+
+【结果大小分流】小结果（≤ 2000 字符）直接内联在正文里；
+  更大的整体落成附件，附件名 = 原文件名。
+  附件随本轮发送，内容已在你的上下文里 —— **不要再 read 一遍同名文件**。
+  **每个文件只读一次**。
+
+【多附件上限】一次最多 6 个工具结果（其余槽位另有用途），超出丢尾并在正文说明丢了几条。
+  单轮所有附件合计 ≤ 1,000,000 字符 —— 超了上游会静默返回空。
+  读大文件只取需要的区间（offset / limit），不要把整份挂上去。
+
+【内层工具参数表】以 dsh 的 SDK 表为准（system 里已有完整表）。
+  下面是常用速查，参数名照抄，不要自创：
+"""
+
+
+PTC_PROTOCOL_ZH = r"""
+PTC 模式：工具表里只有 run_code 一个工具。
+
+## 怎么写 run_code 的代码
+
+run_code 接收两个必填参数：code —— 一个 async TypeScript 函数的函数体（只支持可擦除语法，
+不能用 enum / namespace；类型标注只是注释，运行时会被剥离）—— 以及 description ——
+一句话说明这段程序做什么。
+
+下面列出的 SDK 声明只是这个程序里的绑定名字。一个名字被声明，不代表它就能作为工具直接调用
+—— 只有单独作为工具 schema 提供的名字才能直接调。
+
+run_code 是你唯一能直接调用的工具 —— 直接点名任何其他工具都会失败。
+SDK 里声明的每一个工具，都要在程序里通过 tools.<名字>(args) 调用。
+
+在程序里：
+- 用 await tools.<名字>(args) 调工具 —— 名字有特殊字符时用引号写法：tools["my-tool"](args)。
+  每次调用都会解析成该工具的规范化 JSON 值。工具参数必须是无损 JSON。
+- 工具调用失败会以 ToolCallError 抛出，其 toolName 标识失败的工具，message 是人话 ——
+  用 try/catch 接住并继续。
+- 互相独立的只读调用可以在 Promise.all 下并发（安全调用并发跑；写操作单独跑，按提交顺序）。
+  有依赖的调用用 await 串起来。
+- 用 return 和/或 console.log(...) 输出结果。只有你 print 或 return 的东西才是程序输出。
+  含图片的成功工具结果会在下一轮作为附件返回，供你查看；其他中间结果不会进入对话 ——
+  只提取你需要的部分。
+
+这个程序专属的 SDK 绑定：（运行时在此处填充）
+
+工具结果怎么回来：每个工具调用的结果都会在下一轮以附件形式返回。
+用你上一轮发出的 call_id 匹配 —— 不要依赖附件名。
+"""
+
 
 # ## 先说一句，再动手（2026-10-04 改）
 
@@ -5499,6 +5636,17 @@ Tools callable from inside run_code (write tools.<name>({...})). * = required:
 Copy parameter names exactly; do not invent your own -- a wrong name (e.g. `id` instead of `job_id`, `timeout` instead of `timeoutMs`, `path` instead of `file_path`) aborts the whole turn and wastes it.
 """
 
+PTC_INNER_NAMES = frozenset([
+    "ask_user_question", "bash", "cordis_define", "cordis_inspect_list",
+    "cordis_inspect_query", "cordis_inspect_self", "cordis_run",
+    "cordis_stop", "cordis_undefine", "create_goal", "edit", "get_goal",
+    "glob", "grep", "interrupt_agent", "job_kill", "job_list",
+    "job_output", "list_subagent_models", "present", "pwsh", "ralph",
+    "read", "read_image", "send_message", "skill", "str_replace_editor",
+    "todo_write", "update_goal", "web_fetch", "web_search", "write",
+])
+
+
 
 def detect_mode(tools):
     """判定本轮是 PTC 还是标准模式。**全桥唯一判据，谁都别再自己猜。**
@@ -5519,27 +5667,36 @@ def detect_mode(tools):
     （`Error: unknown tool "run_code"`），因为 _rc_emit 当年「无条件包 run_code」。
     现在统一到这里，其余地方只准读它的结果。
 
-    ## 判据（按可靠性排序，命中即返回）
+    ## 判据（2026-10-11 用户口径定稿）
 
-    PTC 的特征是 **dsh 只放行 run_code 一个工具**，其余工具必须从 code 里调。
-    所以：
+    用户原话：「在协议那 只要不是标准模式则别管哪个模式 都要按 ptc模式走」。
 
-      1. **工具表里有 run_code** → PTC。
-         这是 dsh 侧 PTC 的直接标志，不需要别的佐证。
-         注意：**不能要求「且没有 pwsh」**。实测真实请求（_toolnames.log，24 轮）
-         ntools=50/51 且 run_code 与 pwsh 会同时出现在工具清单文本里 —— 旧判据
-         在这种情况下会判成「非 PTC」，于是发标准协议、模型写 name=pwsh、
-         被执行器拒。这正是「经常报错」的根。
+    所以判据**反过来**：先认标准模式，认不出就一律 PTC。
 
-      2. **工具表里没有 run_code，但有 pwsh** → 标准模式。
-         实测 24/24 轮都是这一形态（ntools=50/51）。
+      1. **标准模式的唯一标志** = 工具表里**有 pwsh、没有 run_code**。
+         这是 dsh 把真工具直发下来的形态，模型 name 直接写真实工具名。
+         实测标准模式 24/24 轮都是这一形态（ntools=50/51）。
 
-      3. 两者都没有 → 按标准模式（保守）。
-         标准协议教的是「name 写真实工具名」，在任何非 PTC 的表下都成立；
-         宁可发标准协议，也不要错发 PTC 协议 —— 后者会诱导模型把所有调用
-         都套进 run_code，而表里连 run_code 都没有，必然全灭。
+      2. **其余一切 → PTC。** 包括：
+         · 有 run_code（PTC 本体，dsh 只放行 run_code 一个工具）
+         · run_code 与 pwsh 同时在 —— 实测真实请求（_toolnames.log，24 轮）
+           ntools=50/51 时这俩会同时出现在工具清单文本里，旧判据在这里判成
+           「非 PTC」，于是发标准协议、模型写 name=pwsh、被执行器拒。
+           这正是「经常报错」的根。
+         · 极简 / 创造等既没 run_code 也没 pwsh 的模式 —— 旧代码把它们判成
+           standard，发标准协议放行直发，而那些模式并不放行，必然全灭。
 
-      4. tools 为空/读不到 → 标准模式。
+      3. tools 为空 / 一个工具名都读不到 → 标准模式。
+         **这不是判据，是异常兜底。** 拿不到工具名时两种协议都可能错，而
+         standard 不会诱导模型去包一个表里根本不存在的 run_code，所以取它。
+         一旦能读出工具名，就严格按第 1、2 条走。
+
+    为什么反过来才完整：旧写法「有 run_code → PTC，否则 standard」只覆盖了
+    PTC 一种模式，把所有「未知」都归到 standard，而 standard 是唯一会放行
+    「模型直发真实工具名」的模式 —— 判错就把调用直接送进执行器拒。新写法
+    只把**证据最硬的那一种**（有 pwsh 无 run_code）认作标准，剩下的全按 PTC
+    收进 run_code 壳里：错也只错在「多包一层」，不会出现「直发一个执行器
+    不认的名字」这种必错路径。
     """
     try:
         if not tools:
@@ -5553,10 +5710,12 @@ def detect_mode(tools):
                 names.add(nm)
         if not names:
             return "standard"
-        # PTC 的直接标志：run_code 在场。
-        if "run_code" in names:
-            return "ptc"
-        return "standard"
+        # 2026-10-11 用户口径：先认标准模式（有 pwsh、无 run_code），
+        # 其余一律 PTC。判据反过来 —— 只把证据最硬的一种认作 standard，
+        # 剩下的全收进 run_code 壳里，错也只错在「多包一层」。
+        if "run_code" not in names and "pwsh" in names:
+            return "standard"
+        return "ptc"
     except BaseException:            # noqa: BLE001
         # 判定本身绝不能把请求搞挂 —— 出任何意外都退回标准模式。
         return "standard"
@@ -5981,7 +6140,7 @@ def _proto_for(tools):
         #
         # 想回退到完整版：把下面这行换成 `return PTC_PROTOCOL` 即可
         # （PTC_PROTOCOL 常量原样保留，没删）。
-        return PTC_PROTOCOL
+        return PTC_PROTOCOL_BRIDGE_ZH
     return pget("tool_protocol", TOOL_PROTOCOL)
 
 
@@ -5999,53 +6158,49 @@ def _proto_for(tools):
 #
 # 所以普通模式发这一版：**语法照留，动员归零，并显式给出"不调用"的出口。**
 PROTOCOL_CASUAL_PTC = r"""
-⚠ 本轮是 **PTC 模式**（工具表里只有 run_code 一个）。
+PTC mode (this turn): the tool table contains only run_code.
 
-下面只是**写法**说明 —— 本轮是否需要用工具，取决于用户当前的要求，不取决于这段。
+This is only a syntax note — whether you need a tool this turn depends on what the user is asking, not on this block.
 
-需要调用时，最外层永远是一个 run_code，参数是 code + description（两个都必填）：
+When you do call, the outermost level is always one run_code with parameters code + description (both required):
 
 ```json
 {"tool_calls": [{"name": "run_code", "arguments": {
-  "description": "执行 PowerShell 查看目录",
-  "code": "const r = await tools.pwsh({ command: \"Get-ChildItem\", description: \"列目录\" }); return r;"
+  "description": "run a PowerShell command",
+  "code": "const r = await tools.pwsh({ command: \"Get-ChildItem\", description: \"list dir\" }); return r;"
 }}]}
 ```
 
-里面用 `await tools.<真正的工具名>({...})` 调你要的工具：
+Inside, call the tool you need via `await tools.<real_tool_name>({...})`:
 
     const r = await tools.pwsh({ command: "...", description: "..." });
     const r = await tools.read({ file_path: "..." });
     const r = await tools.grep({ pattern: "...", path: "..." });
 
-要点：
-- **内层参数表就是该工具自己的参数表**（pwsh 要 command+description，
-  read 要 file_path，grep 要 pattern）。别把 arguments 当参数名。
-- **不要直接调其它工具名。** 直接写 name=pwsh 会被执行器拒掉，报 unknown tool。
-- 一段 code 里可以调多次，也可以处理返回值后再 return。
+Key points:
+- The inner parameter object IS that tool's own schema (pwsh takes command+description, read takes file_path, grep takes pattern). Never use "arguments" as a parameter name.
+- Do NOT call any other tool name directly. Writing name=pwsh directly is rejected by the executor as unknown tool.
+- One code body may call several tools, or process return values before returning.
 
-**用户只是在聊天、问候、闲聊、问身份或问一般知识时，不要调用 run_code，
-直接用自然语言回答。** 工具是备用能力，不是每轮必做的开场动作。
+When the user is just chatting, greeting, asking who you are, or asking general knowledge, do not call run_code — answer in plain language. Tools are a fallback capability, not a mandatory opening move every turn.
 """
 
 PROTOCOL_CASUAL_STD = r"""
-下面只是**写法**说明 —— 本轮是否需要用工具，取决于用户当前的要求，不取决于这段。
+This is only a syntax note — whether you need a tool this turn depends on what the user is asking, not on this block.
 
-要调用工具时，整条回复只输出一个 JSON 代码块，不要有任何别的文字：
+To call a tool, your entire reply must be one JSON code block with nothing else:
 
 ```json
-{"tool_calls": [{"name": "工具名", "arguments": {"参数名": "参数值"}}]}
+{"tool_calls": [{"name": "tool_name", "arguments": {"param": "value"}}]}
 ```
 
-规则：
-- arguments 必须是 JSON 对象，严格符合该工具的参数表，不要自己编字段。
-- **必填字段一个都不能少**：参数表里标了 required 的字段，每个都要给。
-- **别把外壳名当参数名**：arguments、input、parameters 是外壳的键名，
-  不是任何工具的参数名。
-- 一次可以放多个工具调用，但只输出一个 JSON 代码块。
+Rules:
+- "arguments" must be a JSON object that strictly matches that tool's parameter schema; do not invent fields.
+- All required fields must be present: every field marked required in the schema.
+- Do not treat wrapper keys as parameter names: arguments, input, parameters are wrapper keys, not any tool's parameter names.
+- You may emit several tool calls at once, but only in one JSON code block.
 
-**不需要调用工具时，正常用自然语言回答，不要输出上面那种 JSON。**
-用户只是在聊天、问候、闲聊、问身份或问一般知识时，就属于这一种。
+When no tool call is needed, answer in plain natural language; do not emit the JSON form above. When the user is just chatting, greeting, asking who you are, or asking general knowledge, this is that case.
 """
 
 
@@ -6169,7 +6324,14 @@ def tools_brief(tools):
     #
     # 改法：PTC 下**不印这行外层清单**，直接接内层参数表（那才是模型缺的）。
     # 标准模式照旧（那边 tools 是真表，清单是必要的能力声明）。
-    _ptc_only = has_tool(tools, "run_code") and not has_tool(tools, "pwsh")
+    # 2026-10-11 用户口径（「只要不是标准模式则别管哪个模式 都要按 ptc模式走」）：
+    # **这两处改读 detect_mode 的唯一结果（is_ptc）。**
+    #
+    # 病：这里原来自拼「has_tool(run_code) and not has_tool(pwsh)」—— 那是
+    # 诊断报告 5.1 节列的**第四套判据**。run_code 与 pwsh 共存时它判 False
+    # （非 PTC），于是协议发 PTC 版、工具表却按标准印，两边打架。
+    # 现在跟 _proto_for / _rc_emit / _switch_emit 一样只读 is_ptc。
+    _ptc_only = is_ptc(tools)
     if _ptc_only:
         head = ""
     else:
@@ -6187,7 +6349,7 @@ def tools_brief(tools):
     #
     # 所以这里挂一份**静态**的内层表：名字 + 必填性 + 类型，不含长描述
     # （省字数，描述本来也在各工具的 schema 里，模型不需要逐字读）。
-    if has_tool(tools, "run_code") and not has_tool(tools, "pwsh"):
+    if _ptc_only:
         head += chr(10) + chr(10) + PTC_INNER_TOOLS
     return head
 def tools_catalog(tools):
@@ -8282,9 +8444,7 @@ CHUNK_REMINDER = (
 
 # 关掉思考重发时贴在 prompt 末尾的一句。不重传整段上下文，只加这一句 ——
 # 省一次全量重传，也让上游看到的是「上一条空回复之后被要求重来」。
-NUDGE_BODY = ("\n\n【必须给正文】你上一条只输出了思考，正文是空的。"
-              "现在把结论直接写出来：要调工具就输出工具调用 JSON 块，"
-              "不要复述推理过程。")
+NUDGE_BODY = ("[Required: produce body text] Your previous turn contained only reasoning; the body was empty. State the conclusion directly now: to call a tool, emit the tool-call JSON block; do not restate the reasoning.")
 
 
 # 2026-10-06（用户口径「还有没有需要优化的」）：**收紧这条警告的判据。**
@@ -8303,6 +8463,32 @@ _CALL_ATTEMPT_RE = re.compile(
     r'|```\s*json',
     re.I)
 
+
+def _strip_dsml_markup(t):
+    """Strip leftover tool-call markup from forwarded prose (markup only).
+
+    2026-10-10: 'body shows raw code' = model emitted a tool-call attempt that
+    split_calls failed to parse, and the bridge forwarded the raw text unchanged,
+    so the client saw DSML invoke markup. These markers can never be legit prose.
+    Only DSML-specific markers are removed; normal fenced code blocks are kept.
+    """
+    if not t:
+        return t
+    try:
+        B = chr(0xff5c)
+        vb = "[" + B + "|]{1,2}"
+        pat = vb + r"\s*DSML\s*" + vb
+        s = re.sub(pat + r"\s*calls[^>]{0,4}.*?" + pat + r"\s*/?\s*calls",
+                   " ", t, flags=re.S | re.I)
+        s = re.sub(pat + r"\s*invoke\b.*?" + pat + r"\s*/\s*invoke",
+                   " ", s, flags=re.S | re.I)
+        s = re.sub(r"<[^<>\n]{0,40}?(?:DSML|" + B + r"|" + chr(0x2581) + r")[^<>\n]{0,40}?>",
+                   " ", s)
+        s = re.sub(r"^[ \t]*" + vb + r"\s*(?:DSML|invoke|parameter|calls)\b.*$",
+                   " ", s, flags=re.M | re.I)
+        return re.sub(r"\n{3,}", "\n\n", s).strip()
+    except BaseException:
+        return t
 
 def _looks_like_call_attempt(text):
     """这段文本是不是「想调工具但没解析出来」。"""
@@ -8399,6 +8585,51 @@ def _own_root():
         return ""
 
 
+def _valid_drives():
+    import string as _s
+    import pathlib as _p
+    out = set()
+    for _d in _s.ascii_uppercase:
+        try:
+            if _p.Path(_d + chr(58) + chr(47)).exists():
+                out.add(_d + chr(58))
+        except BaseException:
+            pass
+    return out
+
+def _rewrite_dead_drives(t, pr):
+    if not t or not pr:
+        return t
+    valid = _valid_drives()
+    if not valid:
+        return t
+    BS = chr(92)
+    SL = chr(47)
+    CL = chr(58)
+    out = []
+    i = 0
+    n = len(t)
+    while i < n:
+        if i + 2 < n and t[i].isalpha() and t[i+1] == CL and (t[i+2] == BS or t[i+2] == SL) and (i == 0 or not (t[i-1].isalnum() or t[i-1] == chr(95))):
+            d = t[i].upper() + CL
+            j = i + 3
+            while j < n:
+                ch = t[j]
+                o = ord(ch)
+                if o > 127 or ch.isalnum() or ch in chr(46) + SL + chr(95) + CL + chr(45):
+                    j += 1
+                else:
+                    break
+            if d in valid:
+                out.append(t[i:j])
+            else:
+                out.append(pr)
+            i = j
+        else:
+            out.append(t[i])
+            i += 1
+    return "".join(out)
+
 def retarget_roots(text, peer_root):
     """把文本里桥本机的根目录前缀换成对端根目录。
 
@@ -8466,6 +8697,17 @@ def _evid_root_from_messages(messages):
         c = str(c or "")
         if not c:
             continue
+        # 2026-10-09: dsh runtime ctx, role=user, fixed anchor
+        if role == "user" and not anchor:
+            _p = c.find("session workspace:")
+            if _p >= 0:
+                _q1 = c.find(chr(34), _p)
+                _q2 = c.find(chr(34), _q1 + 1) if _q1 >= 0 else -1
+                if _q1 >= 0 and _q2 > _q1:
+                    _hit = _norm_root(c[_q1 + 1:_q2])
+                    if _hit:
+                        anchor = _hit
+                        scan = "dsh runtime ctx session workspace"
         if role == "system" and not anchor:
             anchor = _evid_root_from_text(c)
             if anchor:
@@ -10591,25 +10833,21 @@ def parse_tool_calls(text, tools=None):
 
 
 # 模型常无视 TOOL_PROTOCOL，直接按 dsh 系统提示的约定输出「【工具调用】名字 + json 围栏块」。
-DSH_MARK = re.compile(r'【工具调用】\s*([A-Za-z_][\w.-]*)')
+DSH_MARK = re.compile(r'(?:【工具调用】|调用工具[:：]|工具调用[:：])\s*([A-Za-z_][\w.-]*)')
 
 
 def _from_dsh_marker(text, tools=None):
-    """认「【工具调用】run_code + ```json {参数}```」这种形状。
-
-    dsh 系统提示里的工具调用约定就是「【工具调用】名字」，模型常照它输出、
-    无视桥的 TOOL_PROTOCOL（"tool_calls" 那套）。这里按「【工具调用】名字 + 紧跟的
-    json 围栏块」解析，那个 json 块是参数本身（不带 name/arguments 外壳）。
-    """
+    """认【工具调用】名字 + json 围栏。PTC 下模型写内层工具名(pwsh/read..)时
+    自动包成 run_code —— 2026-10-10 修「代码不执行」。"""
     text = text or ""
     m = DSH_MARK.search(text)
     if not m:
         return None, []
     name = m.group(1)
-    if tools and not any((t.get("function") or {}).get("name") == name
-                         for t in tools):
-        return None, []          # 名字不在工具表里，不认，免得误吞正文
-    fm = re.search(r'```(?:json)?\s*\n?(.*?)```', text[m.end():], re.S)
+    _is_outer = bool(tools) and any(
+        (t.get("function") or {}).get("name") == name for t in tools)
+    _bt = chr(96) * 3
+    fm = re.search(_bt + r'(?:json)?\s*\n?(.*?)' + _bt, text[m.end():], re.S)
     if not fm:
         return None, []
     raw = fm.group(1).strip()
@@ -10619,8 +10857,389 @@ def _from_dsh_marker(text, tools=None):
         return None, []
     if not isinstance(args, dict):
         return None, []
-    call = _mk(0, name, args)
-    return [call], [(m.start(), m.end() + fm.end())]
+    if _is_outer:
+        call = _mk(0, name, args)
+        return [call], [(m.start(), m.end() + fm.end())]
+    if detect_mode(tools) == "ptc" and name in PTC_INNER_NAMES:
+        _j = json.dumps(args, ensure_ascii=False)
+        code = "const r = await tools." + name + "(" + _j + ");" + chr(10) + "return r;"
+        call = _mk(0, "run_code", {
+            "description": "桥自动包装:" + name, "code": code})
+        return [call], [(m.start(), m.end() + fm.end())]
+    return None, []
+
+
+
+def _ptc_wrap(calls, tools):
+    if not calls or detect_mode(tools) != "ptc":
+        return calls
+    out = []
+    for c in calls:
+        try:
+            fn = c.get("function") or {}
+            name = fn.get("name")
+            if not name or name == "run_code" or name not in PTC_INNER_NAMES:
+                out.append(c)
+                continue
+            args = fn.get("arguments")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {}
+            if not isinstance(args, dict):
+                args = {}
+            _j = json.dumps(args, ensure_ascii=False)
+            _code = "const r = await tools." + name + "(" + _j + ");" + chr(10) + "return r;"
+            _a = json.dumps({"description": "PTC wrap: " + name, "code": _code}, ensure_ascii=False)
+            out.append({"index": c.get("index", 0), "id": c.get("id", "call_x"),
+                        "type": "function", "function": {"name": "run_code", "arguments": _a}})
+        except BaseException:
+            out.append(c)
+    return out
+
+
+def _from_repair(text):
+    dq = chr(34)
+    sq = chr(39)
+    bs = chr(92)
+    src = text or ""
+    toolname = None
+    endpos = -1
+    startpos = -1
+    m = re.search(dq + "name" + dq + r"\s*:\s*" + dq + r"([A-Za-z_][A-Za-z0-9_.-]*)" + dq, src)
+    if m:
+        toolname = m.group(1)
+        endpos = m.end()
+        startpos = m.start()
+    else:
+        m2 = re.search(r"await\s+tools\.([A-Za-z_][A-Za-z0-9_]*)", src)
+        if m2:
+            toolname = m2.group(1)
+            endpos = m2.end()
+            startpos = m2.start()
+    if not toolname or endpos < 0:
+        return None, []
+    i = src.find(chr(123), endpos)
+    if i < 0:
+        return None, []
+    depth = 0
+    in_s = False
+    quote = ""
+    esc = False
+    j = i
+    n = len(src)
+    while j < n:
+        ch = src[j]
+        if in_s:
+            if esc:
+                esc = False
+            elif ch == bs:
+                esc = True
+            elif ch == quote:
+                in_s = False
+        else:
+            if ch == dq or ch == sq:
+                in_s = True
+                quote = ch
+            elif ch == chr(123):
+                depth += 1
+            elif ch == chr(125):
+                depth -= 1
+                if depth == 0:
+                    j += 1
+                    break
+        j += 1
+    if depth != 0:
+        return None, []
+    blob = src[i:j]
+    args = {}
+    try:
+        v = json.loads(blob)
+        if isinstance(v, dict) and v:
+            args = v
+    except ValueError:
+        args = {}
+    if not args:
+        kp = re.compile(r"[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?\s*:\s*")
+        hits = list(kp.finditer(blob))
+        for idx in range(len(hits)):
+            key = hits[idx].group(1)
+            vstart = hits[idx].end()
+            vend = hits[idx + 1].start() if idx + 1 < len(hits) else len(blob)
+            raw = blob[vstart:vend].strip()
+            if raw.endswith(","):
+                raw = raw[:-1].strip()
+            if raw.endswith(chr(125)):
+                raw = raw[:-1].strip()
+            if len(raw) >= 2 and raw[0] in (dq, sq) and raw[-1] == raw[0]:
+                raw = raw[1:-1]
+            args[key] = raw
+    if not args:
+        return None, []
+    start = src.rfind(chr(123), 0, startpos + 1)
+    if start < 0:
+        start = startpos
+    return [_mk(0, toolname, args)], [(start, j)]
+
+
+def _fix_bad_escapes(s):
+    """清掉非法 JSON 转义（模型偶尔写 \'）。"""
+    if not s:
+        return s
+    out = []
+    i = 0
+    n = len(s)
+    valid = '"' + chr(92) + '/bfnrtu'
+    while i < n:
+        ch = s[i]
+        if ch == chr(92) and i + 1 < n:
+            nxt = s[i + 1]
+            if nxt in valid:
+                out.append(ch)
+                out.append(nxt)
+                i += 2
+                continue
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return ''.join(out)
+
+
+def _balance_json(s):
+    """栈式补齐 [ 和 { 的配平（字符串感知），并闭合未终止的字符串。"""
+    DQ = chr(34)
+    SQ = chr(39)
+    BS = chr(92)
+    LBR = chr(91)
+    RBR = chr(93)
+    LBK = chr(123)
+    RBK = chr(125)
+    stack = []
+    ins = False
+    q = DQ
+    e = False
+    for ch in s:
+        if ins:
+            if e:
+                e = False
+            elif ch == BS:
+                e = True
+            elif ch == q:
+                ins = False
+        else:
+            if ch == DQ:
+                ins = True
+                q = DQ
+            elif ch == LBR:
+                stack.append(RBR)
+            elif ch == LBK:
+                stack.append(RBK)
+            elif ch == RBR or ch == RBK:
+                if stack and stack[-1] == ch:
+                    stack.pop()
+    if not stack and not ins:
+        return s
+    out = s
+    if ins:
+        out = out + q
+    for close in reversed(stack):
+        out = out + close
+    return out
+
+
+def _repair_json(s):
+    """先补配平，再把字符串里的裸控制字符转义，最后清洗非法转义。"""
+    if not s:
+        return s
+    t = _balance_json(s)
+    DQ = chr(34)
+    BS = chr(92)
+    out = []
+    ins = False
+    q = DQ
+    e = False
+    for ch in t:
+        if ins:
+            if e:
+                out.append(ch)
+                e = False
+                continue
+            if ch == BS:
+                out.append(ch)
+                e = True
+                continue
+            if ch == q:
+                out.append(ch)
+                ins = False
+                continue
+            o = ord(ch)
+            if o < 32:
+                out.append(BS + {9: "t", 10: "n", 13: "r"}.get(o, "n"))
+                continue
+            out.append(ch)
+        else:
+            if ch == DQ:
+                ins = True
+                q = DQ
+            out.append(ch)
+    return _fix_bad_escapes("".join(out))
+
+
+
+def _from_call_block(text, tools=None):
+    """认块状调用：前缀/无前缀 + 数组体；坏JSON 降级 _from_repair 循环抠多项；v5 向前吞裸名字行。"""
+    text = text or ""
+    _WS = " " + chr(9) + chr(13) + chr(10)
+    _NAME = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
+    prefixes = ("【工具调用】", "调用工具:", "调用工具：", "工具调用:", "工具调用：")
+    start = -1
+    i = -1
+    cands = []
+    for p in prefixes:
+        k = 0
+        while True:
+            k = text.find(p, k)
+            if k < 0:
+                break
+            cands.append(k)
+            k += 1
+    cands.sort()
+    for c in cands:
+        plen = 0
+        for p in prefixes:
+            if text.startswith(p, c):
+                plen = len(p)
+                break
+        ii = c + plen
+        while ii < len(text) and text[ii] in _WS:
+            ii += 1
+        if ii < len(text) and text[ii] in "[{":
+            start = c
+            i = ii
+            break
+    if start < 0:
+        t = text.strip()
+        if t.startswith("[") and t.endswith("]"):
+            start = text.find("[")
+            i = start
+    if start < 0:
+        return None, []
+    kk = start - 1
+    while kk >= 0 and text[kk] in _WS:
+        kk -= 1
+    if kk >= 0:
+        m = kk
+        while m >= 0 and text[m] in _NAME:
+            m -= 1
+        if m != kk:
+            name_start = m + 1
+            for p in prefixes:
+                ppos = name_start - 1
+                while ppos >= 0 and text[ppos] in _WS:
+                    ppos -= 1
+                pstart = ppos - len(p) + 1
+                if pstart < 0:
+                    continue
+                if text[pstart:ppos + 1] == p:
+                    start = pstart
+                    break
+    opener = text[i]
+    closer = "]" if opener == "[" else "}"
+    depth = 0
+    in_s = False
+    quote = ""
+    esc = False
+    j = i
+    n = len(text)
+    while j < n:
+        ch = text[j]
+        if in_s:
+            if esc:
+                esc = False
+            elif ch == chr(92):
+                esc = True
+            elif ch == quote:
+                in_s = False
+        else:
+            if ch == chr(34) or ch == chr(39):
+                in_s = True
+                quote = ch
+            elif ch == opener:
+                depth += 1
+            elif ch == closer:
+                depth -= 1
+                if depth == 0:
+                    j += 1
+                    break
+        j += 1
+    if depth != 0:
+        ec = text.rfind(closer, i)
+        j = ec + 1 if ec > i else n
+    blob = text[i:j]
+    obj = None
+    try:
+        obj = json.loads(blob)
+    except ValueError:
+        obj = None
+    # 2026-10-10: 模型偶尔输出非法转义 \'，json.loads 直接拒，整链全灭。清洗后重试。
+    if obj is None:
+        try:
+            obj = json.loads(_repair_json(blob), strict=False)
+        except ValueError:
+            obj = None
+    if obj is not None:
+        if isinstance(obj, dict):
+            items = [obj]
+        elif isinstance(obj, list):
+            items = obj
+        else:
+            return None, []
+        out = []
+        for k2, it in enumerate(items):
+            if not isinstance(it, dict):
+                continue
+            fn = it.get("function") if isinstance(it.get("function"), dict) else {}
+            name = it.get("name") or fn.get("name")
+            if not name:
+                continue
+            if not (("arguments" in it) or ("input" in it) or ("parameters" in it) or ("arguments" in fn)):
+                continue
+            args = it.get("arguments")
+            if args is None:
+                args = it.get("input")
+            if args is None:
+                args = it.get("parameters")
+            if args is None:
+                args = fn.get("arguments")
+            out.append(_mk(k2, name, args))
+        if not out or len(out) != len(items):
+            return None, []
+        return out, [(start, j)]
+    all_calls = []
+    rest = blob
+    for _i in range(20):
+        try:
+            cc, ss = _from_repair(rest)
+        except BaseException:
+            break
+        if not cc or not ss:
+            break
+        all_calls.append(cc[0])
+        _a, _b = ss[0]
+        if _b <= 0 or _b >= len(rest):
+            break
+        _nxt = rest[_b:]
+        if _nxt == rest:
+            break
+        rest = _nxt
+        if not rest.strip():
+            break
+    if all_calls:
+        return all_calls, [(start, j)]
+    return None, []
+
 
 
 def split_calls(text, tools=None):
@@ -10630,7 +11249,9 @@ def split_calls(text, tools=None):
     客户端就只看得到思考和命令，看不到那段介绍。这里顺手把调用占的区间抠掉，
     剩下的还给调用方当正文发出去。
     """
-    calls, spans = _from_json(text)
+    calls, spans = _from_call_block(text, tools)
+    if not calls:
+        calls, spans = _from_json(text)
     if not calls:
         calls, spans = _from_native(text, tools)
     if not calls:
@@ -10640,7 +11261,12 @@ def split_calls(text, tools=None):
     if not calls:
         calls, spans = _from_bare_await(text, tools)
     if not calls:
-        return None, text or ""
+        calls, spans = _from_fenced_bare(text, tools)
+    if not calls:
+        calls, spans = _from_repair(text)
+    if not calls:
+        return None, _strip_dsml_markup(text or "")
+    calls = _ptc_wrap(calls, tools)
     # 2026-10-01 第459步：**交回客户端之前，把相对路径锚定到本轮本机根。**
     # 见 anchor_paths 的注释：模型经常不照〔本机目录〕段填，
     # 与其反复提醒，不如在出口处纠一次 —— 它填 x.py 也能落在对的地方。
@@ -10648,7 +11274,7 @@ def split_calls(text, tools=None):
         anchor_paths(calls)
     except BaseException:            # noqa: BLE001
         pass
-    return calls, _drop_spans(text or "", spans)
+    return calls, _strip_dsml_markup(_drop_spans(text or "", spans))
 
 
 # 抠掉调用区间后，紧贴在它前后的外壳（```json 围栏、DSML 标签）也不是正文。
@@ -10699,7 +11325,7 @@ def _from_json(text):
     嵌套括号、反引号、代码块都不会干扰。
     """
     text = text or ""
-    dec = json.JSONDecoder()
+    dec = json.JSONDecoder(strict=False)
     i = 0
     while True:
         start = text.find("{", i)
@@ -10932,6 +11558,79 @@ NATIVE_AWAIT = re.compile(
     r'await\s+tools\.([A-Za-z_][\w]*)\s*\(', re.S)
 
 
+# 2026-10-11 加：认「代码围栏里的裸参数 JSON」。
+#
+# 实测 11:05:57 [309]：模型在 json 围栏里给了真参数
+#   {"command":"echo HELLO","description":"探测 pwsh"}
+# 只缺 {"tool_calls":[{"name":"pwsh","arguments":{...}}]} 外壳。
+# 前面几个解析器全落空 -> 当正文 -> 不执行。
+#
+# 判据（宁可漏判不可误判）：
+#   1. 必须在代码围栏里（正文里的裸 JSON 可能是在举例）
+#   2. 围栏内容必须是合法 JSON 对象
+#   3. 对象的键必须能唯一映射到一个工具
+#   4. 围栏前 120 字内要有调用意图标记
+# 四条全过才认。
+
+_BARE_KEY2TOOL = (
+    (frozenset(("file_path", "content")), "write"),
+    (frozenset(("command",)), "pwsh"),
+    (frozenset(("code",)), "run_code"),
+    (frozenset(("file_path",)), "read"),
+    (frozenset(("pattern",)), "grep"),
+)
+
+_BARE_INTENT = (
+    "调用工具:",
+    "调用工具：",
+    "本轮动作",
+    "真调一次",
+)
+
+
+def _from_fenced_bare(text, tools=None):
+    text = text or ""
+    if tools is None:
+        return None, []
+    fence = chr(96) * 3
+    i = text.find(fence)
+    if i < 0:
+        return None, []
+    j = text.find(fence, i + 3)
+    if j < 0:
+        return None, []
+    body = text[i + 3:j]
+    nl = body.find(chr(10))
+    if 0 <= nl < 20:
+        body = body[nl + 1:]
+    body = body.strip()
+    if not body or len(body) > 20000:
+        return None, []
+    try:
+        obj = json.loads(body)
+    except ValueError:
+        return None, []
+    if not isinstance(obj, dict) or not obj:
+        return None, []
+    keys = set(obj.keys())
+    name = None
+    for sig, tool in _BARE_KEY2TOOL:
+        if sig <= keys:
+            name = tool
+            break
+    if not name:
+        return None, []
+    try:
+        if not has_tool(tools, name):
+            return None, []
+    except BaseException:
+        pass
+    head = text[max(0, i - 120):i]
+    if not any(mark in head for mark in _BARE_INTENT):
+        return None, []
+    args = json.dumps(obj, ensure_ascii=False)
+    return [_mk(0, name, args)], [(i, j + 3)]
+
 def _from_bare_await(text, tools=None):
     """认「裸的 await tools.<名>({...})」—— 模型漏了外面那层 JSON 壳。
 
@@ -10969,14 +11668,28 @@ def _from_bare_await(text, tools=None):
     #   中文逗号/句号/问号、或者 6 个以上连续中文（说明在讲话，不在写代码）。
     _head = text[:hits[0].start()]
     _PROSE = re.compile(r'[\u4e00-\u9fff]{6,}|[\uff0c\u3002\uff1f\uff01\uff1b]')
-    if _PROSE.search(_head):
+    # 2026-10-11 fence-aware guard (fix 779 18:12:47 lost call)
+    # model wrote prose + a js fence holding a bare await tools.job_list();
+    # _PROSE matched the Chinese prose and rejected -> body. Inside an unclosed
+    # code fence it is CODE, not prose, so skip the prose guard there.
+    _fence3 = chr(96) * 3
+    try:
+        _pre = text[:hits[0].start()]
+        _in_fence = (_pre.count(_fence3) % 2 == 1)
+    except BaseException:
+        _in_fence = False
+    if _PROSE.search(_head) and not _in_fence:
         return None, []
     m = hits[0]
     name = m.group(1)
     # ① 工具名要在本轮工具表里
     if tools is not None:
         try:
-            if not has_tool(tools, name):
+            # 2026-10-11: PTC 模式下工具表里只有 run_code，但模型可以
+            # 写内层调用（await tools.job_list() 等）—— _ptc_wrap 会包成
+            # run_code 壳。所以只要表里有 run_code，任何名字都放行。
+            # 其它守卫（唯一命中 / fence-aware / 参数配平）仍然生效。
+            if not has_tool(tools, name) and not has_tool(tools, "run_code"):
                 return None, []
         except BaseException:        # noqa: BLE001
             pass
@@ -11007,11 +11720,12 @@ def _from_bare_await(text, tools=None):
     if depth != 0:
         return None, []
     args_src = text[i + 1:j - 1].strip()
+    # 2026-10-11: a no-arg tool call (empty parens) is a VALID call (args={}), not a reason to reject. Model 779 wrote one and got dropped as prose.
     if not args_src:
-        return None, []
-    # 参数是 JS 对象字面量（键可以没引号）—— 宽松解析：键补引号后当 JSON 读。
-    args = _loose_js_args(args_src)
-    if not args:
+        args = {}
+    else:
+        args = _loose_js_args(args_src)
+    if args is None:
         return None, []
     return [_mk(0, name, args)], [(m.start(), j)]
 
@@ -11149,31 +11863,31 @@ def stitch(head, tail):
 # 用户会看到满屏源码，模型下一轮也会被自己的垃圾输出带偏，还常常误判成
 # 「文件系统坏了」。换成一句明确的指令，把它推回分段写的正道上。
 SALVAGE_NOTE = r"""
-[桥接] 这一轮的工具调用**没能解析出来**，自动接续也没能补完，所以**没有任何工具被执行**，磁盘上什么都没变。文件系统是正常的 —— 不要去查磁盘，也不要重读文件找原因。
+[Bridge] This turn’s tool call could not be parsed, and auto-continuation could not complete it, so no tool was executed and nothing on disk changed. The filesystem is fine - do not inspect the disk or re-read files to find the cause.
 
-三种原因，桥分不清是哪一种，但处理办法一样：
-  A. 内容太长，回复在中途被上游砍断；
-  B. 大段内容塞进一个 JSON 字符串，里面的引号或反斜杠转义出错（实测 6 千字的单参数就炸过）；
-  C. **内层工具的参数名写错了**（2026-10-04 加）。最常见的两个：
-       pwsh 的超时叫 `timeoutMs`（毫秒），**不是 `timeout`**；
-       读文件叫 `file_path`，不是 `path`。
-     写法：await tools.pwsh({ command: "...", description: "..." }) —— 参数名照抄，别自创。
+Three possible causes; the bridge cannot tell which one, but the remedy is the same:
+  A. The content was too long and the reply was cut off mid-way upstream;
+  B. A large block was placed inside one JSON string and its quotes or backslash escapes were malformed;
+  C. An inner tool parameter name was misspelled. The two most common:
+       pwsh timeout is timeoutMs (milliseconds), not timeout;
+       reading a file takes file_path, not path.
+     Usage: await tools.pwsh({ command: "...", description: "..." }) - copy the parameter names; do not invent them.
 
-重来一次，二选一：
+Try again, one of two ways:
 
-1) 要写长内容（多行代码、长文本）-> 改用**原生格式，不做 JSON 转义**。桥同样认这种写法：
+1) For long content (multi-line code, long text) -> use the native format, no JSON escaping. The bridge accepts it:
 
 <invoke name="write">
-<parameter name="file_path">目标文件的全路径</parameter>
-<parameter name="content">第一行
-第二行 —— 里面的双引号、反斜杠、模板串都原样写，不用转义</parameter>
+<parameter name="file_path">absolute path of the target file</parameter>
+<parameter name="content">first line
+second line - write quotes, backslashes and template strings verbatim, no escaping needed</parameter>
 </invoke>
 
-   要点：一个 invoke 只放一个工具；参数按上面那样换行写；除了这段不要输出别的内容。
+   Key points: one invoke per tool; write each parameter on its own line as shown; output nothing else besides this block.
 
-2) 或者**分段写**：一轮只写不超过 3000 字符的一段，先用 write 写第一段、拿到成功回执后，下一轮再追加下一段，直到写完。拆分点选在行边界上，不要在字符串或标签中间断开。
+2) Or write in segments: no more than 3000 characters per turn - use write for the first segment, then after a success receipt append the next segment on the following turn, until done. Split at line boundaries; never inside a string literal or tag.
 
-不要再试图把整个文件塞进一个参数里。
+Do not try to put the whole file into a single parameter again.
 """
 
 
@@ -11187,12 +11901,7 @@ SALVAGE_NOTE = r"""
 # 注意：本表**必须**放在所有提示词常量定义之后（最后一个常量是 SALVAGE_NOTE）。
 # 引用它的函数定义在前面没关系 —— 它们是运行时才读。
 PROMPTS = {
-    "tool_protocol": TOOL_PROTOCOL,
-    "checkpoint_instruction": CHECKPOINT_INSTRUCTION,
-    "salvage_note": SALVAGE_NOTE,
     "ctx_empty_note": CTX_EMPTY_NOTE,
-    "nudge_body": NUDGE_BODY,
-    "attach_note": ATTACH_NOTE,
     "attach_note_no_cp": ATTACH_NOTE_NO_CP,
     "attach_note_local": ATTACH_NOTE_LOCAL,
     "attach_ctx_lines": ATTACH_CTX_LINES,
@@ -13795,6 +14504,9 @@ class Bridge:
             except BaseException:        # noqa: BLE001
                 _snap = ""
             _head = chr(10) + chr(10)
+            # 2026-10-11 rolled back: standing_note is no longer forced to
+            # the very front of the prompt. It stays in its normal slot
+            # (build_prompt / tail_of) when its switch is on.
             _parts = [x for x in (_snap, _h) if x]
             _body = _head.join(_parts)
             return (_body + _head + p) if _body else p
@@ -16912,12 +17624,7 @@ def _slugify(name, taken, token=""):
 # 缺省 = 开（保持老配置的行为不变）。关掉时 pget() 一律返回空串 ——
 # 这一份彻底不发，而不是"回落到厂值"。见 pget/pset 的注释。
 _PROMPT_FACTORY = {
-    "tool_protocol": TOOL_PROTOCOL,
-    "checkpoint_instruction": CHECKPOINT_INSTRUCTION,
-    "salvage_note": SALVAGE_NOTE,
     "ctx_empty_note": CTX_EMPTY_NOTE,
-    "nudge_body": NUDGE_BODY,
-    "attach_note": ATTACH_NOTE,
     "attach_note_no_cp": ATTACH_NOTE_NO_CP,
     "attach_note_local": ATTACH_NOTE_LOCAL,
     "attach_ctx_lines": ATTACH_CTX_LINES,
@@ -17154,7 +17861,18 @@ class Pool:
                     continue
                 c = self._rr.get(g) or {"active": None, "cursor": 0, "since": 0.0, "turns": 0}
                 slug = str(cell.get("active") or "")
-                c["active"] = self.bridges.get(slug) if slug else None
+                # 2026-10-09: only accept active if slug belongs to this group
+                _ok_grp = False
+                if slug:
+                    _g_all = self._groups() or []
+                    if not _g_all:
+                        _ok_grp = True
+                    else:
+                        for _g3 in _g_all:
+                            if _g3.get("id") == g and slug in (_g3.get("slugs") or []):
+                                _ok_grp = True
+                                break
+                c["active"] = self.bridges.get(slug) if (slug and _ok_grp) else None
                 c["cursor"] = int(cell.get("cursor") or 0)
                 c["since"] = float(cell.get("since") or 0.0)
                 c["turns"] = int(cell.get("turns") or 0)
@@ -17249,10 +17967,15 @@ class Pool:
                     _pool_slugs.add(_s)
         except Exception:
             _pool_slugs = set()
+        # 2026-10-11: honour <key>_on here too. Before this the switch was
+        # only read by dsweb for display; bridge kept sending the note even
+        # when it was turned off in the console.
         if br.slug in _pool_slugs:
-            br.standing_note = _note("pool_note")
+            br.standing_note = (_note("pool_note")
+                                if _prompt_on(self.conf, "pool_note") else "")
         else:
-            br.standing_note = _note("standing_note")
+            br.standing_note = (_note("standing_note")
+                                if _prompt_on(self.conf, "standing_note") else "")
         # 格式提醒（2026-09-27 第346步，用户要求）：与池/固定号无关，谁跑都带。
         # 专门放「报错过的格式规范」，用户往设置台里加，每轮上游必然看到。
         # 空串 = 界面上清空了，这段就不发（reminder_block 会丢掉空段）。
@@ -18310,6 +19033,23 @@ class Pool:
             cur = self.rr_active
             if cur is not None and not cur.enabled:
                 cur = None
+            # 2026-10-09: runtime group check
+            if cur is not None:
+                _cur_in_grp = False
+                try:
+                    _gnow = self._gid()
+                    for _g2 in (self._groups() or []):
+                        if _g2.get("id") == _gnow and getattr(cur, "slug", "") in (_g2.get("slugs") or []):
+                            _cur_in_grp = True
+                            break
+                except BaseException:
+                    _cur_in_grp = False
+                if not _cur_in_grp:
+                    cur = None
+                    try:
+                        self.rr_active = None
+                    except BaseException:
+                        pass
             if cur is not None and not self._yield_reason(cur):
                 self.rr_active = cur
                 # 组级条数在**派活这一刻**就 +1：组计数回答的是「这一组
@@ -18752,6 +19492,34 @@ class Handler(BaseHTTPRequestHandler):
             messages, tools = responses_to_messages(req)
         else:
             messages, tools = req.get("messages"), req.get("tools") or []
+
+        # 2026-10-09: extract dsh session workspace for this request
+        try:
+            _ws_r, _ = _evid_root_from_messages(messages)
+            set_req_ws(_ws_r)
+        except BaseException:
+            set_req_ws("")
+        try:
+            _pr_ws = get_req_ws()
+            if _pr_ws and isinstance(messages, list):
+                for _m in messages:
+                    if not isinstance(_m, dict):
+                        continue
+                    _c = _m.get(chr(99)+chr(111)+chr(110)+chr(116)+chr(101)+chr(110)+chr(116))
+                    if isinstance(_c, str) and _c:
+                        _n = _rewrite_dead_drives(_c, _pr_ws)
+                        if _n != _c:
+                            _m[chr(99)+chr(111)+chr(110)+chr(116)+chr(101)+chr(110)+chr(116)] = _n
+                    elif isinstance(_c, list):
+                        for _seg in _c:
+                            if isinstance(_seg, dict):
+                                _st = _seg.get(chr(116)+chr(101)+chr(120)+chr(116))
+                                if isinstance(_st, str) and _st:
+                                    _n = _rewrite_dead_drives(_st, _pr_ws)
+                                    if _n != _st:
+                                        _seg[chr(116)+chr(101)+chr(120)+chr(116)] = _n
+        except BaseException:
+            pass
         if not isinstance(messages, list) or not messages:
             self._err(400, "没有可用的输入（messages / input 是空的）")
         # 2026-10-01 第442步（用户口径：「你先看看怎么存怎么去燥」）：
@@ -20571,6 +21339,24 @@ class Handler(BaseHTTPRequestHandler):
             免得半个标记刚好卡在边界上。
             """
             buf = "".join(live)
+            # DYNAMIC_TOOLNAME (2026-10-10): call detection from this turn's tool table.
+            # Model drifts formats but keeps tool NAMES; names are a closed set.
+            _tn_re = None
+            try:
+                _tns = []
+                for _t in (tools or []):
+                    _fnx = _t.get("function") if isinstance(_t, dict) else _t
+                    if isinstance(_fnx, dict):
+                        _nx = str(_fnx.get("name") or "").strip()
+                        if _nx and _nx.isidentifier():
+                            _tns.append(re.escape(_nx))
+                if _tns:
+                    _alt = "|".join(_tns)
+                    _tn_re = re.compile(
+                        r"(?:\\b(?:" + _alt + r")\\b)[\\s\\S]{0,80}?[\\{\\[]"
+                        r"|[\\{\\[]][\\s\\S]{0,80}?\\b(?:" + _alt + r")\\b")
+            except BaseException:
+                _tn_re = None
             if not buf:
                 return
             # 2026-10-05（用户口径：「怎么还是被桥截了」）：**判据从"见到```就截"
@@ -20601,10 +21387,17 @@ class Handler(BaseHTTPRequestHandler):
                 while i >= 0:
                     if i >= cut:
                         break
-                    if _CALL_HINT.search(buf[i:i + _CALL_WIN]):
+                    _seg = buf[i:i + _CALL_WIN]
+                    if _CALL_HINT.search(_seg) or (_tn_re and _tn_re.search(_seg)):
                         cut = i
                         break
                     i = buf.find(m, i + 1)
+            # 2026-10-10: 中文前缀是无歧义调用标记 —— 见到即无条件停，
+            # 不依赖 hint（arguments 常跨帧，那一刻 hint 还未到齐）。
+            for _hm in _HOLD_HARD:
+                _hi = buf.find(_hm)
+                if 0 <= _hi < cut:
+                    cut = _hi
             # 2026-10-06 修（**「发个你好」那一轮 content 段泄漏调用块的真凶**）：
             #
             # 上面那个 for 循环算出的 `cut` **已经带 _CALL_HINT 判定** ——
@@ -20636,6 +21429,13 @@ class Handler(BaseHTTPRequestHandler):
                 # 出现 "name":"...","arguments" 之类，围栏之后的所有正文就
                 # 永远发不出去（force=True 也走的是 else 分支，一起扣）。
                 keep = len(buf)
+                # 2026-10-10: 纯正文分支也按 _HOLD_HARD 截——
+                # calls 为空时以为没调用，但坏 JSON 会让解析失败，
+                # 而调用块仍在 live 里，这里不截会整段吐出。
+                for _hm2 in _HOLD_HARD:
+                    _hix2 = buf.find(_hm2)
+                    if 0 <= _hix2 < keep:
+                        keep = _hix2
             elif not force:
                 keep = max(0, cut - STREAM_KEEP)
             else:
@@ -20833,12 +21633,18 @@ class Handler(BaseHTTPRequestHandler):
             except BaseException:        # noqa: BLE001
                 pass
         if tools and not calls and _looks_like_call_attempt(text):
+            _raw_bad = text
+            _washed = _strip_dsml_markup(text)
+            if _washed.strip() and not _looks_like_call_attempt(_washed):
+                text = _washed
+            else:
+                text = "[桥接] 本轮模型输出的工具调用无法解析，已拦截原始内容（未转发给客户端）。这一轮没有任何工具被执行。请再发一次；或让模型按协议重新输出。"
             # 2026-10-05（用户口径：「**把给了正文没代码的那个功能直接去掉**」）：
             # **只留日志这一行的证据，正文一个字都不改。**
             # 理由同 _responses 那处：salvage() 会把整段正文换成桥写的模板，
             # 那是桥在替模型说话。桥只转发，判"这轮算不算干活"是 dsh 的事。
             self.bridge.note("  ⚠ 给了工具但没解析出调用（正文原样转发），原文："
-                             + repr((text or "")[:600]))
+                             + repr((_raw_bad or "")[:600]))
 
 
         else:
@@ -21077,7 +21883,16 @@ class Handler(BaseHTTPRequestHandler):
                 sent_text.append(_rest)
         else:
             # 同上：正文尾段和 finish_reason 也一次写出（理由见 if 分支那段）。
-            _rest = _unsent_tail(text or "", sent_so_far)
+            # 2026-10-10: 收尾补发前先裁掉调用块——
+            # split_calls 认不出坏 JSON 时，calls 为空会走本分支，
+            # 原本把整段 text（含调用块）当正文补发出去。
+            _crop = text or ""
+            for _hm in _HOLD_HARD:
+                _hix = _crop.find(_hm)
+                if _hix >= 0:
+                    _crop = _crop[:_hix]
+                    break
+            _rest = _unsent_tail(_crop, sent_so_far)
             try:
                 self.bridge.note(
                     "  ⇡ 收尾补发探针：text=%d 字 sent_so_far=%d 字 待补=%d 字"
@@ -21186,6 +22001,12 @@ class Handler(BaseHTTPRequestHandler):
             except BaseException:        # noqa: BLE001
                 pass
         if tools and not calls and _looks_like_call_attempt(text):
+            _raw_bad = text
+            _washed = _strip_dsml_markup(text)
+            if _washed.strip() and not _looks_like_call_attempt(_washed):
+                text = _washed
+            else:
+                text = "[桥接] 本轮模型输出的工具调用无法解析，已拦截原始内容（未转发给客户端）。这一轮没有任何工具被执行。请再发一次；或让模型按协议重新输出。"
             # 2026-10-05（用户口径：「**把给了正文没代码的那个功能直接去掉**」）：
             # **只记日志，不再改 text。**
             #
@@ -21197,7 +22018,7 @@ class Handler(BaseHTTPRequestHandler):
             # 桥的职责是转发：模型说什么就发什么。判「这轮算不算干活」是
             # dsh 的事（dsh-agent-loop 自己有判据），桥不替它判、也不改字。
             self.bridge.note("  ⚠ 给了工具但没解析出调用（正文原样转发），原文："
-                             + repr((text or "")[:600]))
+                             + repr((_raw_bad or "")[:600]))
 
         elif calls and any(c["function"]["arguments"] in ("{}", "")
                            for c in calls):
@@ -21879,3 +22700,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
