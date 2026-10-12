@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把手机账号的 DeepSeek 包装成一个 OpenAI 兼容的本地模型服务。
+""" OpenAI 兼容的本地模型服务。
 
 起了这个之后，dsh（deepseek-harness）就能像调 Ollama 一样调它：
 
@@ -8163,6 +8163,13 @@ def build_prompt(messages, tools, note="", budget=0, attach=False, keep=0,
             _TLS.dropped.extend(render_turn(m) for m in msgs[:lost])
         msgs = keepm
     chunks = []
+    # 2026-10-11（用户口径：常驻提示词永远放在第一层）：
+    # **这一处覆盖 plan() 之外的两条路** —— 「认不出/太旧 -> 全文重发」
+    # 和「util（标题/摘要小请求）」。note 就是调用方传进来的
+    # self.standing_note；util 那条调用时 note 是默认空串，所以不会插
+    # （避免「恒定」两个字被当成对话标题）。
+    if note and str(note).strip():
+        chunks.append(str(note).strip())
     if attach:
         # 2026-10-04：工作流门已取消（见 tail_of 的长注释）。附件路现在
         # **只看 ledger_applies（在不在组）**，不再看"用户这句话像不像任务"。
@@ -8496,6 +8503,49 @@ def _looks_like_call_attempt(text):
         return bool(_CALL_ATTEMPT_RE.search(text or ""))
     except BaseException:            # noqa: BLE001
         return False
+
+# ===== 返回分类（2026-10-12，任务书 §四）=====
+# 每次模型响应必须能明确区分：
+#   FINAL / TOOL_CALLS / PARSE_ERROR / EMPTY / UPSTREAM_ERROR / CONTINUE
+#
+# 改造前：这条链上只有「split_calls() 返回 None 与否」一个隐式判据。
+# 解析失败时 calls=None，控制流继续往下走，正文被当普通最终回答转发，
+# 客户端看到的是 FINAL —— 工具调用被静默丢弃，没有任何分类可见。
+# 这里把它显式化：分类是**判据**，不是事后描述。
+#
+# UPSTREAM_ERROR / CONTINUE 不在这里猜：前者由异常分支在外层判，
+# 后者由 looks_truncated() + continue_until_parsable() 承担。
+CLASS_FINAL = "FINAL"
+CLASS_TOOL_CALLS = "TOOL_CALLS"
+CLASS_PARSE_ERROR = "PARSE_ERROR"
+CLASS_EMPTY = "EMPTY"
+CLASS_UPSTREAM_ERROR = "UPSTREAM_ERROR"
+CLASS_CONTINUE = "CONTINUE"
+
+
+def classify_response(calls, text, tools):
+    """给一次模型响应定类，返回上面六个常量之一。
+
+    判据顺序（先具体后笼统）：
+      1) calls 非空                -> TOOL_CALLS（已解析出可执行调用）
+      2) 正文为空                  -> EMPTY
+      3) 给了工具 + 文本像调用意图 -> PARSE_ERROR
+      4) 其余                      -> FINAL
+
+    注意第 3 条的边界：只有在**本轮确实给了工具**时才可能判 PARSE_ERROR。
+    没给工具的正常文本，哪怕字面出现工具名，也一律 FINAL（任务书 §四.3）。
+    """
+    try:
+        if calls:
+            return CLASS_TOOL_CALLS
+        if not (text or "").strip():
+            return CLASS_EMPTY
+        if tools and _looks_like_call_attempt(text):
+            return CLASS_PARSE_ERROR
+        return CLASS_FINAL
+    except BaseException:            # noqa: BLE001
+        return CLASS_FINAL
+
 
 def _looks_like_question(text):
     """正文是在向用户提问（要选择/要确认）时，不要贴 NUDGE 重发。
@@ -11265,6 +11315,17 @@ def split_calls(text, tools=None):
     if not calls:
         calls, spans = _from_repair(text)
     if not calls:
+        # 2026-10-12 缺陷2：有工具调用意图标记却七解析全落空，不能静默
+        # 当 FINAL（任务书 §四.2）。命中即记一条诊断，失败静默。
+        try:
+            _t = text or ""
+            if any(_k in _t for _k in (
+                    "调用工具", "tool_calls", "await tools.",
+                    "<|DSML|", "invoke name=")):
+                emit("unparsed_intent", slug="", chars=len(_t))
+        except BaseException:            # noqa: BLE001
+            pass
+        # _unparsed_intent_probe_021
         return None, _strip_dsml_markup(text or "")
     calls = _ptc_wrap(calls, tools)
     # 2026-10-01 第459步：**交回客户端之前，把相对路径锚定到本轮本机根。**
@@ -14507,7 +14568,31 @@ class Bridge:
             # 2026-10-11 rolled back: standing_note is no longer forced to
             # the very front of the prompt. It stays in its normal slot
             # (build_prompt / tail_of) when its switch is on.
-            _parts = [x for x in (_snap, _h) if x]
+            # 2026-10-11（用户口径逐字：「常驻提示词 改为 恒定 永远 放在第一层
+            #   意思 别管请求 响应返回上游 都给我放在第一层」）：
+            # **常驻提示词一律贴 prompt 最前面。**
+            #
+            # 病：这份文本的落点本来是 tail_of() 末尾的〔提醒〕段，而
+            # 2026-10-05 那段被整段砍掉（「我发什么模型接收什么，不用桥去补偿」），
+            # 调用点没了 —— 开关开着（standing_note_on=1 / pool_note_on=1）、
+            # 值也配了（恒定 / 请求）、_stamp() 也把它赋给了 br.standing_note，
+            # 一路传到 tail_of(note=...) 门口，**但没有任何出口**
+            # （reminder_block 全文零调用，是死代码）。
+            #
+            # 改法：改走 _wh() —— 它是 plan() 里「往 prompt 最前塞内容」的
+            # 唯一出口（交接单和快照走的就是它）。
+            # 顺序（用户口径「第一层」= 最前）：常驻 -> 快照 -> 交接单。
+            # 常驻是每轮恒定那一句，比「我干到哪了」更该先被看到。
+            #
+            # _stamp() 已按「在不在组」把值分好（在组用 pool_note、不在组用
+            # standing_note），这里不再判；开关关掉时 _stamp 赋的是空串，
+            # 这一行原样跳过。
+            _lead = ''
+            try:
+                _lead = str(getattr(self, 'standing_note', '') or '').strip()
+            except BaseException:        # noqa: BLE001
+                _lead = ''
+            _parts = [x for x in (_lead, _snap, _h) if x]
             _body = _head.join(_parts)
             return (_body + _head + p) if _body else p
 
@@ -19522,6 +19607,7 @@ class Handler(BaseHTTPRequestHandler):
             pass
         if not isinstance(messages, list) or not messages:
             self._err(400, "没有可用的输入（messages / input 是空的）")
+            return
         # 2026-10-01 第442步（用户口径：「你先看看怎么存怎么去燥」）：
         # **把客户端原样发来的 messages 存一份。**
         #
@@ -21043,6 +21129,11 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     _more, _sid, _mid = self.bridge.continue_until_parsable(
                         model, text, _sid, _mid, tries=1)
+                    # 2026-10-12（任务书 §四.4）：截断续接显式打 CONTINUE。
+                    try:
+                        self.bridge.last_class = CLASS_CONTINUE
+                    except BaseException:        # noqa: BLE001
+                        pass
                 except Exception as _cexc:            # noqa: BLE001
                     self.bridge.note("  无工具接续失败：" + str(_cexc)[:200])
                     _more = None
@@ -21596,6 +21687,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._rotate_away()
                 return
 
+            # 2026-10-12（任务书 §四.4）：chat 线上游失败显式打 UPSTREAM_ERROR。
+            try:
+                self.bridge.last_class = CLASS_UPSTREAM_ERROR
+            except BaseException:        # noqa: BLE001
+                pass
             self._plain(model, f"[桥接] 上游失败：{type(exc).__name__}: {exc}\n\n"
                                f"这一轮没有任何工具被执行。要继续就重发一次。")
             return
@@ -21632,18 +21728,43 @@ class Handler(BaseHTTPRequestHandler):
                     self.bridge.note("  ✚ 补齐必填的说明性字段 %d 处（模型漏了）" % _nf)
             except BaseException:        # noqa: BLE001
                 pass
-        if tools and not calls and _looks_like_call_attempt(text):
+        # 2026-10-12（任务书 §四.1）：判据走显式分类，不再用裸 _looks_like_call_attempt。
+        # classify_response() 把「有 calls / 空正文 / 像调用但解析失败 / 普通文本」
+        # 一次判清；这里只对 PARSE_ERROR 做 DSML 清洗与打点。
+        _cls = classify_response(calls, text, tools)
+        # 2026-10-12（任务书 §四.4）：分类结果统一落盘到 last_class，六类均可观测。
+        # 此前 last_class 只在 PARSE_ERROR 那一支写 —— FINAL / TOOL_CALLS / EMPTY
+        # 在桥内部没有任何留痕，日志里只能靠 note 文字反推这一轮是什么结局。
+        # 这里在分类点一次性记录；下游分支（空回复 429 / 上游断流）只做各自处理，
+        # 不再重新定义「这轮算什么」。
+        try:
+            self.bridge.last_class = _cls
+        except BaseException:        # noqa: BLE001
+            pass
+        if _cls == CLASS_PARSE_ERROR:
             _raw_bad = text
             _washed = _strip_dsml_markup(text)
             if _washed.strip() and not _looks_like_call_attempt(_washed):
                 text = _washed
-            else:
-                text = "[桥接] 本轮模型输出的工具调用无法解析，已拦截原始内容（未转发给客户端）。这一轮没有任何工具被执行。请再发一次；或让模型按协议重新输出。"
+            # 2026-10-12（任务书 §四.2 + 用户 2026-10-05 口径）：**不再写桥模板。**
+            #
+            # 原来这里是 `else: text = "[桥接] 本轮模型输出的工具调用无法解析…"`
+            # —— 桥在替模型说话，与紧邻注释「正文一个字都不改」自相矛盾；
+            # 更要命的是客户端收到一段正常文本，判不出这轮其实是 PARSE_ERROR，
+            # 工具调用就此静默丢弃（任务书点名的「静默伪装成最终回答」）。
+            #
+            # 现在只保留 DSML 清洗（2026-10-10「body shows raw code」那条），
+            # 洗不干净就原样转发；判「这轮算不算干活」是 dsh 的事，桥不替它判。
             # 2026-10-05（用户口径：「**把给了正文没代码的那个功能直接去掉**」）：
             # **只留日志这一行的证据，正文一个字都不改。**
             # 理由同 _responses 那处：salvage() 会把整段正文换成桥写的模板，
             # 那是桥在替模型说话。桥只转发，判"这轮算不算干活"是 dsh 的事。
-            self.bridge.note("  ⚠ 给了工具但没解析出调用（正文原样转发），原文："
+            try:
+                self.bridge.last_class = CLASS_PARSE_ERROR
+            except BaseException:        # noqa: BLE001
+                pass
+            self.bridge.note("  ⚠ PARSE_ERROR 给了工具但没解析出调用"
+                             "（正文原样转发，未换桥模板），原文："
                              + repr((_raw_bad or "")[:600]))
 
 
@@ -21692,6 +21813,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
         if not calls and not (text or "").strip():
+            # 2026-10-12（任务书 §四.4）：空回复显式打 EMPTY。
+            try:
+                self.bridge.last_class = CLASS_EMPTY
+            except BaseException:        # noqa: BLE001
+                pass
             # 2026-09-22 改（用户要求）：思考**不再**当正文发。
             # 上游池看到的是「思考模型」，思考只走 reasoning_content 通道；
             # 正文空就是真的空 —— run() 里的关思考重发先兜一次，兜不住
@@ -21982,6 +22108,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._rotate_away()
                 return
 
+            # 2026-10-12（任务书 §四.4）：上游失败显式打 UPSTREAM_ERROR。
+            try:
+                self.bridge.last_class = CLASS_UPSTREAM_ERROR
+            except BaseException:        # noqa: BLE001
+                pass
             self._err(502, f"上游失败：{type(exc).__name__}: {exc}",
                       "upstream_error")
             return
@@ -21989,6 +22120,11 @@ class Handler(BaseHTTPRequestHandler):
         calls, prose = split_calls(text, tools) if tools else (None, text)
         _fin = getattr(self.bridge, "last_up_finish", None)
         if looks_truncated(text, tools) or (_fin and _fin != "FINISHED"):
+            # 2026-10-12（任务书 §四.4）：截断续接显式打 CONTINUE。
+            try:
+                self.bridge.last_class = CLASS_CONTINUE
+            except BaseException:        # noqa: BLE001
+                pass
             text, sid, mid = self.bridge.continue_until_parsable(
                 model, text, sid, mid)
             calls, prose = split_calls(text, tools)
@@ -22000,13 +22136,33 @@ class Handler(BaseHTTPRequestHandler):
                     self.bridge.note("  ✚ 补齐必填的说明性字段 %d 处（模型漏了）" % _nf2)
             except BaseException:        # noqa: BLE001
                 pass
-        if tools and not calls and _looks_like_call_attempt(text):
+        # 2026-10-12（任务书 §四.1）：判据走显式分类，不再用裸 _looks_like_call_attempt。
+        # classify_response() 把「有 calls / 空正文 / 像调用但解析失败 / 普通文本」
+        # 一次判清；这里只对 PARSE_ERROR 做 DSML 清洗与打点。
+        _cls = classify_response(calls, text, tools)
+        # 2026-10-12（任务书 §四.4）：分类结果统一落盘到 last_class，六类均可观测。
+        # 此前 last_class 只在 PARSE_ERROR 那一支写 —— FINAL / TOOL_CALLS / EMPTY
+        # 在桥内部没有任何留痕，日志里只能靠 note 文字反推这一轮是什么结局。
+        # 这里在分类点一次性记录；下游分支（空回复 429 / 上游断流）只做各自处理，
+        # 不再重新定义「这轮算什么」。
+        try:
+            self.bridge.last_class = _cls
+        except BaseException:        # noqa: BLE001
+            pass
+        if _cls == CLASS_PARSE_ERROR:
             _raw_bad = text
             _washed = _strip_dsml_markup(text)
             if _washed.strip() and not _looks_like_call_attempt(_washed):
                 text = _washed
-            else:
-                text = "[桥接] 本轮模型输出的工具调用无法解析，已拦截原始内容（未转发给客户端）。这一轮没有任何工具被执行。请再发一次；或让模型按协议重新输出。"
+            # 2026-10-12（任务书 §四.2 + 用户 2026-10-05 口径）：**不再写桥模板。**
+            #
+            # 原来这里是 `else: text = "[桥接] 本轮模型输出的工具调用无法解析…"`
+            # —— 桥在替模型说话，与紧邻注释「正文一个字都不改」自相矛盾；
+            # 更要命的是客户端收到一段正常文本，判不出这轮其实是 PARSE_ERROR，
+            # 工具调用就此静默丢弃（任务书点名的「静默伪装成最终回答」）。
+            #
+            # 现在只保留 DSML 清洗（2026-10-10「body shows raw code」那条），
+            # 洗不干净就原样转发；判「这轮算不算干活」是 dsh 的事，桥不替它判。
             # 2026-10-05（用户口径：「**把给了正文没代码的那个功能直接去掉**」）：
             # **只记日志，不再改 text。**
             #
@@ -22017,7 +22173,12 @@ class Handler(BaseHTTPRequestHandler):
             #
             # 桥的职责是转发：模型说什么就发什么。判「这轮算不算干活」是
             # dsh 的事（dsh-agent-loop 自己有判据），桥不替它判、也不改字。
-            self.bridge.note("  ⚠ 给了工具但没解析出调用（正文原样转发），原文："
+            try:
+                self.bridge.last_class = CLASS_PARSE_ERROR
+            except BaseException:        # noqa: BLE001
+                pass
+            self.bridge.note("  ⚠ PARSE_ERROR 给了工具但没解析出调用"
+                             "（正文原样转发，未换桥模板），原文："
                              + repr((_raw_bad or "")[:600]))
 
         elif calls and any(c["function"]["arguments"] in ("{}", "")
@@ -22027,6 +22188,11 @@ class Handler(BaseHTTPRequestHandler):
 
         cot = "".join(reasoning).strip()
         if not calls and not (text or "").strip():
+            # 2026-10-12（任务书 §四.4）：空回复显式打 EMPTY。
+            try:
+                self.bridge.last_class = CLASS_EMPTY
+            except BaseException:        # noqa: BLE001
+                pass
             # 2026-09-22 改：思考不再当正文（同 _buffered）。
             # 原来这里把思考塞进 text 发给客户端，用户读到的全是内心独白。
             # 现在正文空就走下面的空回复分支，让 dsh 自己退避重试。
